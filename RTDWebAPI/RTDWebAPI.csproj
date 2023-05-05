@@ -1,0 +1,125 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net5.0</TargetFramework>
+    <UserSecretsId>f75d42ae-9cbc-483f-a88c-e93d79b2c356</UserSecretsId>
+    <DockerDefaultTargetOS>Windows</DockerDefaultTargetOS>
+    <EnableUnsafeBinaryFormatterSerialization>true</EnableUnsafeBinaryFormatterSerialization>
+    <StartupObject>RTDWebAPI.Program</StartupObject>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <Optimize>False</Optimize>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="ClientApp\**" />
+    <Compile Remove="Commons\Method\HttpClientCallJWTAPI1\**" />
+    <Compile Remove="Commons\Method\HttpClientCallJWTAPI\**" />
+    <Compile Remove="Commons\Method\Log\**" />
+    <Compile Remove="Commons\Method\WebServiceClient\**" />
+    <Compile Remove="Connected Services\**" />
+    <Content Remove="ClientApp\**" />
+    <Content Remove="Commons\Method\HttpClientCallJWTAPI1\**" />
+    <Content Remove="Commons\Method\HttpClientCallJWTAPI\**" />
+    <Content Remove="Commons\Method\Log\**" />
+    <Content Remove="Commons\Method\WebServiceClient\**" />
+    <Content Remove="Connected Services\**" />
+    <EmbeddedResource Remove="ClientApp\**" />
+    <EmbeddedResource Remove="Commons\Method\HttpClientCallJWTAPI1\**" />
+    <EmbeddedResource Remove="Commons\Method\HttpClientCallJWTAPI\**" />
+    <EmbeddedResource Remove="Commons\Method\Log\**" />
+    <EmbeddedResource Remove="Commons\Method\WebServiceClient\**" />
+    <EmbeddedResource Remove="Connected Services\**" />
+    <None Remove="ClientApp\**" />
+    <None Remove="Commons\Method\HttpClientCallJWTAPI1\**" />
+	  
+    <None Remove="Commons\Method\HttpClientCallJWTAPI\**" />
+	  
+    <None Remove="Commons\Method\Log\**" />
+	  
+    <None Remove="Commons\Method\WebServiceClient\**" />
+	  
+    <None Remove="Connected Services\**" />
+	  
+    <TypeScriptCompile Remove="ClientApp\**" />
+	  
+    <TypeScriptCompile Remove="Commons\Method\Log\**" />
+	  
+    <TypeScriptCompile Remove="Commons\Method\WebServiceClient\**" />
+	  
+    <TypeScriptCompile Remove="Connected Services\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Commons\Method\Database\baseDatabaseAccess.cs" />
+    <Compile Remove="Commons\Method\Database\classDatabaseAccess.cs" />
+    <Compile Remove="Commons\Method\LoginResponseDTO.cs" />
+    <Compile Remove="Controllers\EncoderController.cs" />
+    <Compile Remove="Controllers\EventLogicService.cs" />
+    <Compile Remove="Controllers\JWTLoginController.cs" />
+    <Compile Remove="Controllers\LoadCarrierController.cs" />
+    <Compile Remove="Controllers\MainService.cs" />
+    <Compile Remove="Controllers\ValuesController.cs" />
+    <Compile Remove="Controllers\WeatherForecast.cs" />
+    <Compile Remove="Controllers\WeatherForecast2Controller.cs" />
+    <Compile Remove="Controllers\WeatherForecastController.cs" />
+    <Compile Remove="Controllers\WebServiceTest.cs" />
+    <Compile Remove="JwtAuthenticationProvider.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Autofac" Version="6.3.0" />
+    <PackageReference Include="Grpc.AspNetCore" Version="2.40.0" />
+    <PackageReference Include="Microsoft.AspNet.WebApi.Client" Version="5.2.9" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication" Version="2.2.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" Version="5.0.17" />
+    <PackageReference Include="Microsoft.AspNetCore.SpaServices.Extensions" Version="5.0.17" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="6.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Options" Version="6.0.0" />
+    <PackageReference Include="Microsoft.TypeScript.MSBuild" Version="4.8.2">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.15.1" />
+    <PackageReference Include="Nancy.Serialization.JsonNet" Version="1.4.1" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
+    <PackageReference Include="NLog" Version="4.7.15" />
+    <PackageReference Include="Node.js" Version="5.3.0" />
+    <PackageReference Include="node.TypeScript.DefinitelyTyped" Version="3.4.2" />
+    <PackageReference Include="ODP.NetCore" Version="2.0.12" />
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="3.21.120" />
+    <PackageReference Include="Secs4Net" Version="2.0.2" />
+    <PackageReference Include="ServiceStack" Version="6.3.0" />
+    <PackageReference Include="Swagger.Net.UI" Version="1.1.0" />
+    <PackageReference Include="Swashbuckle" Version="5.6.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore" Version="6.3.0" />
+    <PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="6.3.1" />
+    <PackageReference Include="System.Configuration.ConfigurationManager" Version="6.0.0" />
+    <PackageReference Include="System.Data.SqlClient" Version="4.8.3" />
+    <PackageReference Include="System.ServiceModel.Duplex" Version="4.8.*" />
+    <PackageReference Include="System.ServiceModel.Federation" Version="4.8.*" />
+    <PackageReference Include="System.ServiceModel.Http" Version="4.8.*" />
+    <PackageReference Include="System.ServiceModel.NetTcp" Version="4.8.*" />
+    <PackageReference Include="System.ServiceModel.Security" Version="4.8.*" />
+    <PackageReference Include="System.Web.Services.Description" Version="4.9.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Properties\Resources.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
+  </ItemGroup>
+
+  <ItemGroup>
+    <EmbeddedResource Update="Properties\Resources.resx">
+      <Generator>ResXFileCodeGenerator</Generator>
+      <LastGenOutput>Resources.Designer.cs</LastGenOutput>
+    </EmbeddedResource>
+  </ItemGroup>
+
+  <ProjectExtensions><VisualStudio><UserProperties appsettings_1json__JsonSchema="" /></VisualStudio></ProjectExtensions>
+
+</Project>

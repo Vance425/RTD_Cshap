@@ -1,0 +1,64 @@
+{
+  "AppSettings": {
+    "Secret": "D8AE7CCF-8E64-4843-9CC6-76EBBB87B440"
+  },
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft": "Warning",
+      "Microsoft.Hosting.Lifetime": "Information"
+    }
+  },
+  "ThreadPools": {
+    "minThread": {
+      "workerThread": 3,
+      "portThread": 3
+    },
+    "maxThread": {
+      "workerThread": 15,
+      "portThread": 15
+    }
+  },
+  "ReflushTime": {
+    "CheckQueryAvailableTester": {
+      "Time": 3,
+      "TimeUnit": "Minutes"
+    }
+  },
+  "AllowedHosts": "*",
+  "DBConnect": {
+    "Oracle": {
+      "Name": "CIMDB1",
+      "ip": "192.168.0.187",
+      "port": 1521,
+      "user": "AMHS",
+      "pwd": "gsi5613686",
+      "connectionString": "DATA SOURCE={0};USER ID={1};PASSWORD={2};PERSIST SECURITY INFO=True;",
+      "providerName": "Oracle.ManagedDataAccess.Client"
+    }
+  },
+  "MCS": {
+    "ip": "192.168.0.102",
+    "port": "8080"
+  },
+  "RTDHome": {
+    "url": "http://localhost:8039"
+  },
+  "WebService": {
+    "url": "http://192.168.0.102:8089/WebService.asmx",
+    "username": "400973",
+    "password": "379004",
+    "Mode": "soap11"
+  },
+  "CarrierTypeSet": {
+    "MetalRing": "ER002"
+  },
+  "MailSetting": {
+    "Mode": "Localhost",
+    "smtpServer": "intmail.jsg.jcetglobal.com",
+    "username": "Ops.Stats.CIS@jcetglobal.com",
+    "password": "",
+    "AlarmMail": "CISRTDALERT.SCS@jcetglobal.com",
+    "EntryBy": "CISAMR01"
+  }
+}

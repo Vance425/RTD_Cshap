@@ -1,0 +1,48 @@
+{
+  "23Sep2023": {
+    "RTD.V1.1": {
+      "Version.No": "1.0.23.0922.1.1.1",
+      "Upgrade.Item": "QueryOrderWhenOvertime",
+      "Desc": "Auto delete order when overtime.",
+      "Position": "202309221312001"
+    },
+    "RTD.V1.2": {
+      "Version.No": "1.0.23.0922.1.1.1",
+      "Upgrade.Item": "AutoResetCarrierReserveState",
+      "Desc": "Auto reset carrier state reserve when carrier online and no order.",
+      "Position": "202309221312002"
+    }
+  },
+  "11Oct2023": {
+    "RTD.V1.1": {
+      "Version.No": "1.0.23.1011.1.1.1",
+      "Upgrade.Item": "QTime Logic",
+      "Desc": "Add QTime Logic ",
+      "Position": "202310111000001"
+    }
+  },
+  "20Oct2023": {
+    "RTD.V1.1": {
+      "Version.No": "1.0.23.1020.1.1.1",
+      "Upgrade.Item": "Fixed issue of calc dispatching qty error.",
+      "Desc": "Yearly qty wrong",
+      "Position": "202310200900001"
+    }
+  },
+  "22Dec2023": {
+    "RTD.V1.2": {
+      "Version.No": "1.0.23.1222.1.1.2",
+      "Upgrade.Item": "Add Check Q-Time and Fixed Check Lookup Table Logic.",
+      "Desc": "Add Q-Time Logic",
+      "Position": "202312221900002"
+    }
+  },
+  "03Jan2024": {
+    "RTD.V1.2": {
+      "Version.No": "1.0.24.0103.1.0.0",
+      "Upgrade.Item": "Add User Permission.",
+      "Desc": "Add User Permission",
+      "Position": "202401031319001"
+    }
+  }
+}
