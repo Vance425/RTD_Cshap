@@ -34,9 +34,11 @@ namespace RTDWebAPI
         List<DBTool> lstDBSession = new List<DBTool>();
         Dictionary<string, object> uiDataCatch = new Dictionary<string, object>();
         public Dictionary<string, string> alarmDetail = new Dictionary<string, string>();
+        public IConfiguration Configuration { get; }
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
+            string rtdVer = "Version 1.0.24.0902.1.0.1";
             string msg = "";
             string tmpMsg = "";
             //DBPool dbPool = null;
@@ -150,12 +152,12 @@ RRRRRRRRRRRRRRRTTT       DDDDDDDispatcher  System {0} @ Gyro System Inc.", rtdVe
                             Console.WriteLine(msg);
                             logger.Info(msg);
                         }
-                        else
-                        {
-                            msg = string.Format("Create Sequence [{0}] failed.", tmpMsg);
-                            Console.WriteLine(msg);
-                            logger.Info(msg);
-                        }
+                            else
+                            {
+                                msg = string.Format("Create Sequence [{0}] failed.", tmpMsg);
+                                Console.WriteLine(msg);
+                                logger.Info(msg);
+                            }
                         }
 
                         break;
@@ -271,7 +273,7 @@ RRRRRRRRRRRRRRRTTT       DDDDDDDispatcher  System {0} @ Gyro System Inc.", rtdVe
             }
         }
 
-        public IConfiguration Configuration { get; }
+        //public IConfiguration Configuration { get; }
 
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
