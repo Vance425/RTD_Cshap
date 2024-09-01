@@ -207,7 +207,7 @@ namespace RTDWebAPI.Controllers
                 sql = _BaseDataService.SelectAvailableCarrierByCarrierType("Foup", false);
 
                 dt = _dbTool.GetDataTable(_BaseDataService.QueryRackByGroupID("ERT01"));
-                
+
 
                 if(dt.Rows.Count > 0)
                 {

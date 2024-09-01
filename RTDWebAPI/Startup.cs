@@ -37,7 +37,6 @@ namespace RTDWebAPI
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
-            string rtdVer = "Version 1.0.23.1222.1.1.2";
             string msg = "";
             string tmpMsg = "";
             //DBPool dbPool = null;
@@ -129,38 +128,34 @@ RRRRRRRRRRRRRRRTTT       DDDDDDDispatcher  System {0} @ Gyro System Inc.", rtdVe
                         Console.WriteLine(msg);
                         logger.Info(msg);
 
-                        tmpMsg = "COMMAND_STREAMCODE";
-                        if (!OracleSequence.ExistsSequance(dbTool, tmpMsg))
+                        if (OracleSequence.CreateSequence(dbTool, tmpMsg, 1, 99999))
                         {
-                            if (OracleSequence.CreateSequence(dbTool, tmpMsg, 1, 99999))
-                            {
-                                msg = string.Format("Create Sequence [{0}] success.", tmpMsg);
-                                Console.WriteLine(msg);
-                                logger.Info(msg);
-                            }
-                            else
-                            {
-                                msg = string.Format("Create Sequence [{0}] failed.", tmpMsg);
-                                Console.WriteLine(msg);
-                                logger.Info(msg);
-                            }
+                            msg = string.Format("Create Sequence [{0}] success.", tmpMsg);
+                            Console.WriteLine(msg);
+                            logger.Info(msg);
+                        }
+                        else
+                        {
+                            msg = string.Format("Create Sequence [{0}] failed.", tmpMsg);
+                            Console.WriteLine(msg);
+                            logger.Info(msg);
+                        }
                         }
 
                         tmpMsg = "UID_STREAMCODE";
-                        if (!OracleSequence.ExistsSequance(dbTool, tmpMsg))
                         {
                             if (OracleSequence.CreateSequence(dbTool, tmpMsg, 1, 99999999))
                             {
-                                msg = string.Format("Create Sequence [{0}] success.", tmpMsg);
-                                Console.WriteLine(msg);
-                                logger.Info(msg);
-                            }
-                            else
-                            {
-                                msg = string.Format("Create Sequence [{0}] failed.", tmpMsg);
-                                Console.WriteLine(msg);
-                                logger.Info(msg);
-                            }
+                            msg = string.Format("Create Sequence [{0}] success.", tmpMsg);
+                            Console.WriteLine(msg);
+                            logger.Info(msg);
+                        }
+                        else
+                        {
+                            msg = string.Format("Create Sequence [{0}] failed.", tmpMsg);
+                            Console.WriteLine(msg);
+                            logger.Info(msg);
+                        }
                         }
 
                         break;
@@ -205,6 +200,7 @@ RRRRRRRRRRRRRRRTTT       DDDDDDDispatcher  System {0} @ Gyro System Inc.", rtdVe
                             mainService._listDBSession = lstDBSession;
                             mainService._uiDataCatch = uiDataCatch;
                             mainService._alarmDetail = alarmDetail;
+
 
 
                         try
@@ -343,7 +339,6 @@ RRRRRRRRRRRRRRRTTT       DDDDDDDispatcher  System {0} @ Gyro System Inc.", rtdVe
         public static void CreateLogger()
         {
             var config = new LoggingConfiguration();
-            var rtdTarget = new FileTarget
             {
                 FileName = "${basedir}/logs/${shortdate}.log",
                 Layout = "${date:format=yyyy-MM-dd HH\\:mm\\:ss} [${uppercase:${level}}] ${message}",
@@ -357,16 +352,6 @@ RRRRRRRRRRRRRRRTTT       DDDDDDDispatcher  System {0} @ Gyro System Inc.", rtdVe
                 Layout = "${date:format=yyyy-MM-dd HH\\:mm\\:ss} [${uppercase:${level}}] ${message}",
                 ArchiveAboveSize = 153600000,
             };
-            IssueTarget.ArchiveFileName = "${basedir}/logs/Issue_${shortdate}.{#}.log";
-            config.AddRule(LogLevel.Error, LogLevel.Error, IssueTarget);
-            var DebugTarget = new FileTarget
-            {
-                FileName = "${basedir}/logs/Debug_${shortdate}.log",
-                Layout = "${date:format=yyyy-MM-dd HH\\:mm\\:ss} [${uppercase:${level}}] ${message}",
-                ArchiveAboveSize = 153600000,
-            };
-            DebugTarget.ArchiveFileName = "${basedir}/logs/Debug_${shortdate}.{#}.log";
-            config.AddRule(LogLevel.Debug, LogLevel.Debug, DebugTarget);
             LogManager.Configuration = config;
         }
     }
