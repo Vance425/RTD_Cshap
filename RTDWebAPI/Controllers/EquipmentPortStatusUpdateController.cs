@@ -252,23 +252,54 @@ namespace RTDWebAPI.Controllers
                             }
                             else
                             {
+                                CarrierLocationUpdate oCarrierLoc = new CarrierLocationUpdate();
                                 //更新Carrier 位置
                                 sql = string.Format(_BaseDataService.GetCarrierByLocate(EquipID, int.Parse(PortSeq)));
                                 dtTemp = _dbTool.GetDataTable(sql);
 
                                 if (dtTemp.Rows.Count > 0)
                                 {
-                                    CarrierLocationUpdate oCarrierLoc = new CarrierLocationUpdate();
+                                    oCarrierLoc = new CarrierLocationUpdate();
                                     oCarrierLoc.CarrierID = value.CarrierID;
                                     oCarrierLoc.TransferState = PortState;
                                     oCarrierLoc.Location = value.PortID;
                                     oCarrierLoc.LocationType = "EQP";
 
-                                    if (!PortState.Equals("3"))
+                                    if (!PortState.Equals("3") && !PortState.Equals("5"))
                                     {
                                         //清除舊的Carrier Locate
                                         sql = String.Format(_BaseDataService.CarrierLocateReset(oCarrierLoc, haveMetalRing));
                                         _dbTool.SQLExec(sql, out tmpMsg, true);
+                                    }
+                                    else
+                                    {
+                                        if(value.CarrierID.Equals(""))
+                                        {
+                                            if (!value.LotID.Equals(""))
+                                            {
+                                                ///Carrier is empty
+                                                ///lotid not empty, can use lotid to get last carrierid.
+                                                sql = string.Format(_BaseDataService.SelectTableCarrierAssociate3ByLotid(value.LotID));
+                                                dtTemp = _dbTool.GetDataTable(sql);
+
+                                                if (dtTemp.Rows.Count > 0)
+                                                {
+                                                    oCarrierLoc = new CarrierLocationUpdate();
+                                                    oCarrierLoc.CarrierID = dtTemp.Rows[0]["carrier_id"].ToString();
+                                                    oCarrierLoc.TransferState = PortState;
+                                                    oCarrierLoc.Location = value.PortID;
+                                                    oCarrierLoc.LocationType = "EQP";
+
+                                                    //清除舊的Carrier Locate
+                                                    sql = String.Format(_BaseDataService.CarrierLocateReset(oCarrierLoc, haveMetalRing));
+                                                    _dbTool.SQLExec(sql, out tmpMsg, true);
+
+                                                    //更新新的Carrier Locate
+                                                    sql = String.Format(_BaseDataService.UpdateTableCarrierTransfer(oCarrierLoc, haveMetalRing));
+                                                    _dbTool.SQLExec(sql, out tmpMsg, true);
+                                                }
+                                            }
+                                        }
                                     }
                                 }
                                 else
@@ -282,7 +313,7 @@ namespace RTDWebAPI.Controllers
 
                                         if (dtTemp.Rows.Count > 0)
                                         {
-                                            CarrierLocationUpdate oCarrierLoc = new CarrierLocationUpdate();
+                                            oCarrierLoc = new CarrierLocationUpdate();
                                             oCarrierLoc.CarrierID = dtTemp.Rows[0]["carrier_id"].ToString();
                                             oCarrierLoc.TransferState = PortState;
                                             oCarrierLoc.Location = value.PortID;

@@ -471,15 +471,26 @@ namespace RTDWebAPI.Service
                         {
                             if (!dr2["lastmodify_dt"].ToString().Equals(""))
                             {
-                                sql2 = string.Format(_BaseDataService.QueryDataByLotid(GetExtenalTables(_configuration, "SyncExtenalData", "AdsInfo"), dr2["lotid"].ToString()));
+                                sql2 = string.Format(_BaseDataService.QueryDataByLotid("lot_info", dr2["lotid"].ToString()));
                                 dtTemp = _dbTool.GetDataTable(sql2);
 
-                                _dbTool.SQLExec(_BaseDataService.SyncNextStageOfLot(GetExtenalTables(_configuration, "SyncExtenalData", "AdsInfo"), dr2["lotid"].ToString()), out sqlMsg, true);
-
-                                if (TriggerCarrierInfoUpdate(_dbTool, _configuration, _logger, dr2["lotid"].ToString()))
+                                if(dtTemp.Rows.Count > 0)
                                 {
-                                    //Send InfoUpdate
-                                    _logger.Info(string.Format(tmpMsg, _lotID, _tmpOriState, _tmpNewState));
+                                    if(int.Parse(dtTemp.Rows[0]["priority"].ToString()) > 70)
+                                    {
+                                        _dbTool.SQLExec(_BaseDataService.SyncNextStageOfLotNoPriority(GetExtenalTables(_configuration, "SyncExtenalData", "AdsInfo"), dr2["lotid"].ToString()), out sqlMsg, true);
+                                        _logger.Info(string.Format("Special priority: [{0}][{1}][{2}][{3}]", _lotID, dtTemp.Rows[0]["priority"].ToString(), _tmpOriState, _tmpNewState));
+                                    }
+                                    else
+                                    {
+                                        _dbTool.SQLExec(_BaseDataService.SyncNextStageOfLot(GetExtenalTables(_configuration, "SyncExtenalData", "AdsInfo"), dr2["lotid"].ToString()), out sqlMsg, true);    
+                                    }
+
+                                    if (TriggerCarrierInfoUpdate(_dbTool, _configuration, _logger, dr2["lotid"].ToString()))
+                                    {
+                                        //Send InfoUpdate
+                                        _logger.Info(string.Format(tmpMsg, _lotID, _tmpOriState, _tmpNewState));
+                                    }
                                 }
                             }
                         }
@@ -3148,7 +3159,11 @@ namespace RTDWebAPI.Service
                 {
                     //站點不當前站點不同, 不產生指令
                     vStage = "";
-                    sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID);
+#if DEBUG
+                    sql = _BaseDataService.CheckLotStage("lot_info", lotID);
+#else
+sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID);
+#endif
                     dtTemp = _dbTool.GetDataTable(sql);
 
                     if (dtTemp.Rows.Count > 0)
@@ -3656,7 +3671,7 @@ namespace RTDWebAPI.Service
                                                     //rcpconstraint
                                                     bCheckRcpConstraint = drWorkgroup[0]["RCPCONSTRAINT"] is null ? false : drWorkgroup[0]["RCPCONSTRAINT"].ToString().Equals("1") ? true : false;
                                                     bCheckRecipe = drWorkgroup[0]["CHECKCUSTDEVICE"] is null ? false : drWorkgroup[0]["CHECKCUSTDEVICE"].ToString().Equals("1") ? true : false;
-                                                    _priority = 30;
+                                                    _priority = 20;
                                                     _stageController = drWorkgroup[0]["stagecontroller"] is null ? false : drWorkgroup[0]["stagecontroller"].ToString().Equals("1") ? true : false;
                                                     _cannotSame = drWorkgroup[0]["cannotsame"] is null ? false : drWorkgroup[0]["cannotsame"].ToString().Equals("1") ? true : false;
                                                     _aoiMeasurementLogic = drWorkgroup[0]["aoimeasurement"] is null ? false : drWorkgroup[0]["aoimeasurement"].ToString().Equals("1") ? true : false;
@@ -3818,6 +3833,12 @@ namespace RTDWebAPI.Service
                                                             iLotQTime = dtTemp2.Rows[0]["QTIME"] is null ? 0 : float.Parse(dtTemp2.Rows[0]["QTIME"].ToString());
                                                             iQTimeLow = dtTemp2.Rows[0]["minallowabletw"] is null ? 0 : float.Parse(dtTemp2.Rows[0]["minallowabletw"].ToString());
                                                             iQTimeHigh = dtTemp2.Rows[0]["maxallowabletw"] is null ? 0 : float.Parse(dtTemp2.Rows[0]["maxallowabletw"].ToString());
+
+                                                            if(dtTemp2.Rows[0]["gonow"].ToString().Equals("Y"))
+                                                            {
+                                                                ///Q-Time 為Go Now, change lot priority 為80
+                                                                _dbTool.SQLExec(_BaseDataService.UpdatePriorityByLotid(lotID, 80), out tmpMsg, true);
+                                                            }
                                                         }
                                                         catch (Exception ex) { }
 
@@ -3937,19 +3958,16 @@ namespace RTDWebAPI.Service
                         _logger.Debug(string.Format("[Port_Type] {0} / {1} / {2}", drRecord["EQUIPID"].ToString(), drRecord["Port_Type"].ToString(), drRecord["port_id"].ToString()));
                     }
 
-                    if(_stageController)
-                    {
-                        try {
-                            dtTemp = _dbTool.GetDataTable(_BaseDataService.QueryStageCtrlListByPortNo(sPortID));
+                    try {
+                        dtTemp = _dbTool.GetDataTable(_BaseDataService.QueryStageCtrlListByPortNo(sPortID));
 
-                            if(dtTemp.Rows.Count > 0)
-                            {
-                                _dicStageCtrl = dtTemp.AsEnumerable().ToDictionary(p => Convert.ToString(p["stage"]), p => Convert.ToString(p["portid"]));
-                            }
+                        if(dtTemp.Rows.Count > 0)
+                        {
+                            _dicStageCtrl = dtTemp.AsEnumerable().ToDictionary(p => Convert.ToString(p["stage"]), p => Convert.ToString(p["portid"]));
                         }
-                        catch (Exception ex)
-                        { }
                     }
+                    catch (Exception ex)
+                    { }
 
                     _carrierID = "";
                     //Port_Type: in 找一個載具Carrier, Out 找目的地Dest 
@@ -4152,6 +4170,12 @@ namespace RTDWebAPI.Service
                                                                     iLotQTime = draCarrier["QTIME"] is null ? 0 : float.Parse(draCarrier["QTIME"].ToString());
                                                                     iQTimeLow = draCarrier["minallowabletw"] is null ? 0 : float.Parse(draCarrier["minallowabletw"].ToString());
                                                                     iQTimeHigh = draCarrier["maxallowabletw"] is null ? 0 : float.Parse(draCarrier["maxallowabletw"].ToString());
+
+                                                                    if (dtTemp2.Rows[0]["gonow"].ToString().Equals("Y"))
+                                                                    {
+                                                                        ///Q-Time 為Go Now, change lot priority 為80
+                                                                        _dbTool.SQLExec(_BaseDataService.UpdatePriorityByLotid(_lotInCarrier, 80), out tmpMsg, true);
+                                                                    }
                                                                 }
                                                                 catch (Exception ex) { }
 
@@ -4677,6 +4701,12 @@ namespace RTDWebAPI.Service
                                                                     iLotQTime = draCarrier["QTIME"] is null ? 0 : float.Parse(draCarrier["QTIME"].ToString());
                                                                     iQTimeLow = draCarrier["minallowabletw"] is null ? 0 : float.Parse(draCarrier["minallowabletw"].ToString());
                                                                     iQTimeHigh = draCarrier["maxallowabletw"] is null ? 0 : float.Parse(draCarrier["maxallowabletw"].ToString());
+
+                                                                    if (dtTemp2.Rows[0]["gonow"].ToString().Equals("Y"))
+                                                                    {
+                                                                        ///Q-Time 為Go Now, change lot priority 為80
+                                                                        _dbTool.SQLExec(_BaseDataService.UpdatePriorityByLotid(_lotInCarrier, 80), out tmpMsg, true);
+                                                                    }
                                                                 }
                                                                 catch (Exception ex) { }
 
@@ -5577,6 +5607,20 @@ namespace RTDWebAPI.Service
 
                                                             if (_stageController)
                                                             {
+                                                                string tmpdic = "";
+
+                                                                try
+                                                                {
+                                                                    foreach (var kvp in _dicStageCtrl)
+                                                                    {
+                                                                        if (tmpdic.Equals(""))
+                                                                            tmpdic = string.Format("[key={0},value={1}]", kvp.Key, kvp.Value);
+                                                                        else
+                                                                            tmpdic = string.Format("{0}[key={1},value={2}]", tmpdic, kvp.Key, kvp.Value);
+                                                                    }
+                                                                }
+                                                                catch (Exception ex) { }
+
                                                                 if (_dicStageCtrl.Count > 0)
                                                                 {
                                                                     if (_dicStageCtrl.ContainsKey(_stageofLot))
@@ -5588,26 +5632,38 @@ namespace RTDWebAPI.Service
                                                                         }
                                                                         else
                                                                         {
+                                                                            _logger.Debug(tmpdic);
+
+                                                                            _logger.Debug(string.Format("[StageController] {0} / {1} / {2} / {3} / {4}", drRecord["EQUIPID"].ToString(), "The Port Not in dictionary of Stage Controller", _eqpworkgroup, _lotInCarrier, _stageofLot));
                                                                             //不存在
+                                                                            bIsMatch = false;
                                                                             _lotInCarrier = "";
                                                                             CarrierID = "";
-                                                                            bIsMatch = false;
+                                                                            _carrierID = "";
                                                                             goto ResetReserve;
                                                                         }
                                                                     }
                                                                     else
                                                                     {
+                                                                        _logger.Debug(tmpdic);
+
+                                                                        _logger.Debug(string.Format("[StageController] {0} / {1} / {2} / {3} / {4}", drRecord["EQUIPID"].ToString(), "The Stage Not in dictionary of Stage Controller", _eqpworkgroup, _lotInCarrier, _stageofLot));
+                                                                        bIsMatch = false;
                                                                         _lotInCarrier = "";
                                                                         CarrierID = "";
-                                                                        bIsMatch = false;
+                                                                        _carrierID = "";
                                                                         goto ResetReserve;
                                                                     }
                                                                 }
                                                                 else
                                                                 {
+                                                                    _logger.Debug(tmpdic);
+
+                                                                    _logger.Debug(string.Format("[StageController] {0} / {1} / {2} / {3} / {4}", drRecord["EQUIPID"].ToString(), "No Set Stage Controller", _eqpworkgroup, _lotInCarrier, _stageofLot));
+                                                                    bIsMatch = false;
                                                                     _lotInCarrier = "";
                                                                     CarrierID = "";
-                                                                    bIsMatch = false;
+                                                                    _carrierID = "";
                                                                     goto ResetReserve;
                                                                 }
                                                             }
@@ -5696,6 +5752,12 @@ namespace RTDWebAPI.Service
                                                                             iLotQTime = draCarrier["QTIME"] is null ? 0 : float.Parse(draCarrier["QTIME"].ToString());
                                                                             iQTimeLow = draCarrier["minallowabletw"] is null ? 0 : float.Parse(draCarrier["minallowabletw"].ToString());
                                                                             iQTimeHigh = draCarrier["maxallowabletw"] is null ? 0 : float.Parse(draCarrier["maxallowabletw"].ToString());
+
+                                                                            if (dtTemp2.Rows[0]["gonow"].ToString().Equals("Y"))
+                                                                            {
+                                                                                ///Q-Time 為Go Now, change lot priority 為80
+                                                                                _dbTool.SQLExec(_BaseDataService.UpdatePriorityByLotid(_lotInCarrier, 80), out tmpMsg, true);
+                                                                            }
                                                                         }
                                                                         catch (Exception ex) { }
 
@@ -5849,7 +5911,7 @@ namespace RTDWebAPI.Service
                                                                     }
                                                                     else
                                                                     {
-                                                                        _logger.Debug(string.Format("[{0}][Success][{1}][{2}][{3}]", "CheckRcpConstraint", drRecord["EQUIPID"].ToString(), _lotInCarrier, dtTemp.Rows[0]["rcpconstraint_list"].ToString()));
+                                                                        _logger.Debug(string.Format("[{0}][Success][{1}][{2}][{3}]", "CheckRcpConstraint", drRecord["EQUIPID"].ToString(), _lotInCarrier, "Success"));
                                                                     }
                                                                 }
                                                                 catch (Exception ex)
@@ -6500,7 +6562,7 @@ namespace RTDWebAPI.Service
                                                                         _equiplist = dtTemp.Rows[0]["equiplist"].ToString();
                                                                     }
 
-                                                                    _logger.Debug(string.Format("[CheckIsAvailableLot] {0} / {1} / {2} / {3} / {4} / {5} / {6} / {7} / {8}", drRecord["EQUIPID"].ToString(), bIsMatch, _lotInCarrier, _schSeq, _qTime, _goNow, _layerPrio, _lotAge, _equiplist));
+                                                                    _logger.Debug(string.Format("[CheckIsAvailableLot] {0} / {1} / {2} / {3} / {4} / {5} / {6} / {7} / {8} / {9}", drRecord["EQUIPID"].ToString(), _eqpworkgroup, bIsMatch, _lotInCarrier, _schSeq, _qTime, _goNow, _layerPrio, _lotAge, _equiplist));
                                                                 }
                                                                 catch (Exception ex) { }
 
@@ -6528,6 +6590,19 @@ namespace RTDWebAPI.Service
 
                                                                 if (_stageController)
                                                                 {
+                                                                    string tmpdic = "";
+
+                                                                    try
+                                                                    {
+                                                                        foreach (var kvp in _dicStageCtrl)
+                                                                        {
+                                                                            if (tmpdic.Equals(""))
+                                                                                tmpdic = string.Format("[key={0},value={1}]", kvp.Key, kvp.Value);
+                                                                            else
+                                                                                tmpdic = string.Format("{0}[key={1},value={2}]", tmpdic, kvp.Key, kvp.Value);
+                                                                        }
+                                                                    }catch(Exception ex) { }
+
                                                                     if (_dicStageCtrl.Count > 0)
                                                                     {
                                                                         if (_dicStageCtrl.ContainsKey(_stageofLot))
@@ -6539,6 +6614,9 @@ namespace RTDWebAPI.Service
                                                                             }
                                                                             else
                                                                             {
+                                                                                _logger.Debug(tmpdic);
+
+                                                                                _logger.Debug(string.Format("[StageController] {0} / {1} / {2} / {3} / {4}", drRecord["EQUIPID"].ToString(), "The Port Not in dictionary of Stage Controller", _eqpworkgroup, _lotInCarrier, _stageofLot));
                                                                                 //不存在
                                                                                 bIsMatch = false;
                                                                                 _lotInCarrier = "";
@@ -6549,6 +6627,9 @@ namespace RTDWebAPI.Service
                                                                         }
                                                                         else
                                                                         {
+                                                                            _logger.Debug(tmpdic);
+
+                                                                            _logger.Debug(string.Format("[StageController] {0} / {1} / {2} / {3} / {4}", drRecord["EQUIPID"].ToString(), "The Stage Not in dictionary of Stage Controller", _eqpworkgroup, _lotInCarrier, _stageofLot));
                                                                             bIsMatch = false;
                                                                             _lotInCarrier = "";
                                                                             CarrierID = "";
@@ -6558,6 +6639,9 @@ namespace RTDWebAPI.Service
                                                                     }
                                                                     else
                                                                     {
+                                                                        _logger.Debug(tmpdic);
+
+                                                                        _logger.Debug(string.Format("[StageController] {0} / {1} / {2} / {3} / {4}", drRecord["EQUIPID"].ToString(), "No Set Stage Controller", _eqpworkgroup, _lotInCarrier, _stageofLot));
                                                                         bIsMatch = false;
                                                                         _lotInCarrier = "";
                                                                         CarrierID = "";
@@ -6601,10 +6685,14 @@ namespace RTDWebAPI.Service
 
                                                         if (dtTemp.Rows.Count > 0)
                                                         {
+                                                            bNoFind = true;
                                                             try
                                                             {
                                                                 foreach (DataRow drRack in dtTemp.Rows)
                                                                 {
+                                                                    if (!bNoFind)
+                                                                        break;
+
                                                                     try
                                                                     {
                                                                         if (draCarrier["locate"].ToString().Equals(drRack["erackID"].ToString()))
@@ -6614,7 +6702,8 @@ namespace RTDWebAPI.Service
                                                                             {
                                                                                 _logger.Debug(string.Format("[AvailableCarrier ErackID] {0} / {1} / {2} / {3} _Out", drRecord["EQUIPID"].ToString(), drRack["erackID"].ToString(), draCarrier["locate"].ToString(), _carrierID));
                                                                             }
-                                                                            break;
+                                                                            //break;
+                                                                            continue;
                                                                         }
                                                                         else
                                                                         {
@@ -6716,7 +6805,7 @@ namespace RTDWebAPI.Service
                                                                     }
                                                                     else
                                                                     {
-                                                                        _logger.Debug(string.Format("[{0}][Success][{1}][{2}][{3}]", "CheckRcpConstraint", drRecord["EQUIPID"].ToString(), _lotInCarrier, dtTemp.Rows[0]["rcpconstraint_list"].ToString()));
+                                                                        _logger.Debug(string.Format("[{0}][Success][{1}][{2}][{3}]", "CheckRcpConstraint", drRecord["EQUIPID"].ToString(), _lotInCarrier, "Success"));
                                                                     }
                                                                 }
                                                                 catch (Exception ex)
@@ -6844,6 +6933,13 @@ namespace RTDWebAPI.Service
                                                                             iLotQTime = draCarrier["QTIME"] is null ? 0 : float.Parse(draCarrier["QTIME"].ToString());
                                                                             iQTimeLow = draCarrier["minallowabletw"] is null ? 0 : float.Parse(draCarrier["minallowabletw"].ToString());
                                                                             iQTimeHigh = draCarrier["maxallowabletw"] is null ? 0 : float.Parse(draCarrier["maxallowabletw"].ToString());
+
+
+                                                                            if (dtTemp2.Rows[0]["gonow"].ToString().Equals("Y"))
+                                                                            {
+                                                                                ///Q-Time 為Go Now, change lot priority 為80
+                                                                                _dbTool.SQLExec(_BaseDataService.UpdatePriorityByLotid(_lotInCarrier, 80), out tmpMsg, true);
+                                                                            }
                                                                         }
                                                                         catch (Exception ex) { }
 
@@ -7285,6 +7381,7 @@ namespace RTDWebAPI.Service
                             {
                                 iTransferNo++;
                                 tmpCarrierid = trans.CarrierID.Equals("") ? "*" : trans.CarrierID;
+                                trans.LotID = normalTransfer.LotID;
 
                                 /** 如果Command Type is Unload, Carrier ID is *, 暫停3秒, 防止重複產生Unload 指令*/
                                 if (tmpCarrierid.Equals("*"))
@@ -7370,6 +7467,10 @@ namespace RTDWebAPI.Service
                                             workinProcessSch.Priority = 30;
                                         }
                                     }
+                                    else
+                                    {
+                                        workinProcessSch.Priority = eqp_priority;
+                                    }
                                 }
                             }
 
@@ -7395,12 +7496,32 @@ namespace RTDWebAPI.Service
                             {
                                 if (!trans.CarrierID.Equals("*") || trans.CarrierID.Trim().Equals(""))
                                     dtInfo = _dbTool.GetDataTable(_BaseDataService.QueryLotInfoByCarrierID(trans.CarrierID));
+                                else
+                                {
+                                    if (!trans.LotID.Trim().Equals(""))
+                                    {
+                                        dtTemp = _dbTool.GetDataTable(_BaseDataService.SelectTableCarrierAssociate3ByLotid(trans.LotID));
+                                        if (dtTemp.Rows.Count > 0)
+                                        {
+                                            workinProcessSch.CarrierId = dtTemp.Rows[0]["carrier_id"].ToString();
+                                            dtInfo = _dbTool.GetDataTable(_BaseDataService.QueryLotInfoByCarrierID(workinProcessSch.CarrierId));
+                                        }
+                                    }
+                                }
                             }
 
                             if (dtInfo is not null)
                             {
-                                workinProcessSch.LotID = dtInfo.Rows.Count <= 0 ? " " : dtInfo.Rows[0]["lotid"].ToString();
-                                workinProcessSch.Customer = dtInfo.Rows.Count <= 0 ? " " : dtInfo.Rows[0]["customername"].ToString();
+                                if (dtInfo.Rows.Count > 0)
+                                {
+                                    workinProcessSch.LotID = dtInfo.Rows.Count <= 0 ? " " : dtInfo.Rows[0]["lotid"].ToString();
+                                    workinProcessSch.Customer = dtInfo.Rows.Count <= 0 ? " " : dtInfo.Rows[0]["customername"].ToString();
+
+                                    if (int.Parse(dtInfo.Rows[0]["priority"].ToString()) > 70)
+                                    {
+                                        workinProcessSch.Priority = int.Parse(dtInfo.Rows[0]["priority"].ToString());
+                                    }
+                                }
                             }
                             else
                             {
@@ -7468,6 +7589,8 @@ namespace RTDWebAPI.Service
             {
                 //Do Nothing
                 logger.Debug(string.Format("CreateTransferCommandByPortModel [Exception]: {0}", ex.Message));
+
+                _dbTool.SQLExec(_BaseDataService.LockEquip(_Equip, false), out tmpMsg, true);
             }
             finally
             {
@@ -11764,6 +11887,31 @@ Detail: {6}", rtdAlarms.UnitType, rtdAlarms.UnitID, rtdAlarms.Code, rtdAlarms.Ca
                                             //Type.
                                             tmpParams.Add(rtdAlarms.UnitType);
                                             //Body
+                                            if(_tempPortID.Equals(""))
+                                            {
+                                                try { 
+                                                    sql = _BaseDataService.QueryPortInfobyPortID(rtdAlarms.CommandID);
+                                                    dtTemp = _dbTool.GetDataTable(sql);
+
+                                                    if (dtTemp.Rows.Count > 0)
+                                                    {
+                                                        switch (dtTemp.Rows[0]["cmd_type"].ToString())
+                                                        {
+                                                            case "LOAD":
+                                                                _tempPortID = dtTemp.Rows[0]["dest"].ToString();
+                                                                break;
+                                                            case "UNLOAD":
+                                                                _tempPortID = dtTemp.Rows[0]["source"].ToString();
+                                                                break;
+                                                            default:
+                                                                _tempPortID = dtTemp.Rows[0]["dest"].ToString();
+                                                                break;
+                                                        }
+                                                    }
+                                                }
+                                                catch (Exception ex) { }
+                                            }
+
                                             tempMsg = string.Format(@"Please check the tool ID [{0}] get the {1} : {2} now.", _tempPortID, rtdAlarms.Code, rtdAlarms.Cause);
 
                                             tmpParams.Add(string.Format(tempMsg));
@@ -11895,7 +12043,9 @@ Detail: {6}", rtdAlarms.UnitType, rtdAlarms.UnitID, rtdAlarms.Code, rtdAlarms.Ca
                                             MailCtrl.MailMsg = JcetAlarmMsg;
 
                                             _tmpState = "SendMail";
-                                            MailCtrl.SendMail();
+
+                                            if(!_tempPortID.Equals(""))
+                                                MailCtrl.SendMail();
 
                                             tmpMsg = string.Format("SendMail: [{0}], [{1}]", JcetAlarmMsg.Subject, JcetAlarmMsg.Body);
                                             _logger.Info(tmpMsg);

@@ -1907,5 +1907,145 @@ namespace RTDWebAPI.Controllers
 
             return foo;
         }
+        [HttpPost("SetWorkgroupSetByWorkgroupStage")]
+        public APIResult SetWorkgroupSetByWorkgroupStage([FromBody] ClassWorkgroupSetting value)
+        {
+            APIResult foo;
+            string funcName = "SetWorkgroupSetByWorkgroupStage";
+            string tmpMsg = "";
+            string tmp2Msg = "";
+            DataTable dt = null;
+            DataTable dtTemp = null;
+            DataRow[] dr = null;
+            string sql = "";
+            string tmpKey = "";
+            string _stage = "";
+            string _userID = "";
+            string resultMsg = "";
+            string _paramsName = "";
+
+            IBaseDataService _BaseDataService = new BaseDataService();
+
+            try
+            {
+                _paramsName = "SetWorkgroupSetByWorkgroupStage";
+
+                _userID = value.UserID.Equals("") ? "-----" : value.UserID;
+
+                dt = _dbTool.GetDataTable(_BaseDataService.QueryWorkgroupSet(value.Workgroup));
+
+                if (dt.Rows.Count > 0)
+                {
+                    Boolean enableFunction = false;
+
+                    if (!value.Workgroup.Equals(""))
+                        tmpKey = string.Format("workgroup='{0}'", value.Workgroup);
+
+                    if (!value.Stage.Equals(""))
+                        tmpKey = string.Format("{0} and stage='{1}'", tmpKey, value.Stage);
+
+                    if (!value.Parameter.Equals(""))
+                        _paramsName = string.Format("{0}", value.Parameter.Trim());
+
+                    if (!tmpKey.Equals(""))
+                    {
+                        sql = _BaseDataService.SetWorkgroupSetByWorkgroupStage(value.Workgroup, value.Stage, value.Parameter, true);
+                        dtTemp = _dbTool.GetDataTable(sql);
+
+                        if (dr.Length > 0)
+                        {
+                            tmp2Msg = "{" + string.Format(@"'{0}':'{1}', 'UserID':'{2}'", value.Stage, dr[0][_paramsName].ToString(), _userID) + "}";
+                            //iPreTransMode = dt.Rows[0]["PRETRANSFER"].ToString().Equals("1") ? true : false;
+                            enableFunction = dr[0][_paramsName].ToString().Equals("1") ? true : false;
+                            _stage = value.Stage;
+                        }
+                        else
+                        {
+                            tmpMsg = string.Format("Stage {0} not exist.", value.Stage);
+                        }
+                    }
+                    else
+                    {
+                        string tmpStage = "";
+                        string lstStage = "";
+
+                        foreach (DataRow drTemp in dt.Rows)
+                        {
+                            tmpStage = string.Format(@"'{0}':'{1}'", drTemp["stage"].ToString(), drTemp[_paramsName].ToString());
+
+                            if (lstStage.Equals(""))
+                                lstStage = tmpStage;
+                            else
+                                lstStage = string.Format("{0}, {1}", lstStage, tmpStage);
+                        }
+
+                        tmp2Msg = "{" + string.Format(@"{0}, 'UserID':'{1}'", lstStage, _userID) + "}";
+
+                        enableFunction = dt.Rows[0][_paramsName].ToString().Equals("1") ? true : false;
+                        _stage = "";
+                    }
+                }
+                else
+                {
+                    tmpMsg = string.Format("Workgroup {0} not exist.", value.Workgroup);
+                }
+
+                if (tmpMsg.Equals(""))
+                {
+                    if (resultMsg.Equals(""))
+                        tmp2Msg = string.Format("Set use fail eRack success. [{0}][{1}] by [{2}]", value.Workgroup, _stage, _userID);
+                    else
+                        tmp2Msg = string.Format("Set use fail eRack success. {0} [{1}][{2}] by [{3}]", resultMsg, value.Workgroup, _stage, _userID);
+
+                    _logger.Info(tmp2Msg);
+
+                    foo = new APIResult()
+                    {
+                        Success = true,
+                        State = "OK",
+                        Message = tmpMsg
+                    };
+                }
+                else
+                {
+                    tmp2Msg = string.Format("Set use fail eRack failed. [{0}][{1}] by [{2}]", value.Workgroup, _stage, _userID);
+                    _logger.Info(tmp2Msg);
+
+                    foo = new APIResult()
+                    {
+                        Success = false,
+                        State = "NG",
+                        Message = tmpMsg
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                foo = new APIResult()
+                {
+                    Success = true,
+                    State = "NG",
+                    Message = ex.Message
+                };
+            }
+            finally
+            {
+                //_logger.LogInformation(string.Format("Info :{0}", value.CarrierID));
+                if (dt is not null)
+                {
+                    dt.Clear(); dt.Dispose(); dt = null; dr = null;
+                }
+            }
+
+            return foo;
+        }
+        public class ClassWorkgroupSetting
+        {
+            public string Workgroup { get; set; }
+            public string Stage { get; set; }
+            public string Parameter { get; set; }
+            public bool SwState { get; set; }
+            public string UserID { get; set; }
+        }
     }
 }

@@ -2,7 +2,6 @@
 using Microsoft.Extensions.Configuration;
 using NLog;
 using RTDWebAPI.Commons.Method.Database;
-using RTDWebAPI.Commons.Method.Log;
 using RTDWebAPI.Interface;
 using RTDWebAPI.Models;
 using RTDWebAPI.Service;

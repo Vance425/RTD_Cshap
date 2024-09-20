@@ -34,7 +34,6 @@ namespace RTDWebAPI
         List<DBTool> lstDBSession = new List<DBTool>();
         Dictionary<string, object> uiDataCatch = new Dictionary<string, object>();
         public Dictionary<string, string> alarmDetail = new Dictionary<string, string>();
-        public IConfiguration Configuration { get; }
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
@@ -121,7 +120,7 @@ RRRRRRRRRRRRRRRTTT       DDDDDDDispatcher  System {0} @ Gyro System Inc.", rtdVe
                             {
                                 keyAlarm = string.Format("{0}{1}", row["AlarmCode"].ToString(), row["SubCode"].ToString());
                                 //"AlarmCode", "AlarmText"
-                                if(!alarmDetail.ContainsKey(keyAlarm))
+                                if (!alarmDetail.ContainsKey(keyAlarm))
                                     alarmDetail.Add(keyAlarm, row["AlarmText"].ToString());
                             }
                         }
@@ -130,28 +129,32 @@ RRRRRRRRRRRRRRRTTT       DDDDDDDispatcher  System {0} @ Gyro System Inc.", rtdVe
                         Console.WriteLine(msg);
                         logger.Info(msg);
 
-                        if (OracleSequence.CreateSequence(dbTool, tmpMsg, 1, 99999))
+                        tmpMsg = "COMMAND_STREAMCODE";
+                        if (!OracleSequence.ExistsSequance(dbTool, tmpMsg))
                         {
-                            msg = string.Format("Create Sequence [{0}] success.", tmpMsg);
-                            Console.WriteLine(msg);
-                            logger.Info(msg);
-                        }
-                        else
-                        {
-                            msg = string.Format("Create Sequence [{0}] failed.", tmpMsg);
-                            Console.WriteLine(msg);
-                            logger.Info(msg);
-                        }
+                            if (OracleSequence.CreateSequence(dbTool, tmpMsg, 1, 99999))
+                            {
+                                msg = string.Format("Create Sequence [{0}] success.", tmpMsg);
+                                Console.WriteLine(msg);
+                                logger.Info(msg);
+                            }
+                            else
+                            {
+                                msg = string.Format("Create Sequence [{0}] failed.", tmpMsg);
+                                Console.WriteLine(msg);
+                                logger.Info(msg);
+                            }
                         }
 
                         tmpMsg = "UID_STREAMCODE";
+                        if (!OracleSequence.ExistsSequance(dbTool, tmpMsg))
                         {
                             if (OracleSequence.CreateSequence(dbTool, tmpMsg, 1, 99999999))
                             {
-                            msg = string.Format("Create Sequence [{0}] success.", tmpMsg);
-                            Console.WriteLine(msg);
-                            logger.Info(msg);
-                        }
+                                msg = string.Format("Create Sequence [{0}] success.", tmpMsg);
+                                Console.WriteLine(msg);
+                                logger.Info(msg);
+                            }
                             else
                             {
                                 msg = string.Format("Create Sequence [{0}] failed.", tmpMsg);
@@ -163,7 +166,7 @@ RRRRRRRRRRRRRRRTTT       DDDDDDDispatcher  System {0} @ Gyro System Inc.", rtdVe
                         break;
                     }
                 }
-                catch(Exception ex)
+                catch (Exception ex)
                 {
                     msg = "Unknow fail when create DBTool Failed¡I";
                     Console.WriteLine(msg);
@@ -189,51 +192,50 @@ RRRRRRRRRRRRRRRTTT       DDDDDDDispatcher  System {0} @ Gyro System Inc.", rtdVe
 
                     //while (true)
                     //{
-                        if (!mainService.IsAlive)
-                        {
-                            mainService.IsAlive = false;
-                            mainService._logger = logger;
-                            mainService._dbTool = dbTool;
-                            mainService._dbAPI = dbAPI;
-                            mainService._eventQueue = eventQ;
-                            mainService._threadConntroll = threadControll;
-                            mainService._configuration = configuration;
-                            mainService._functionService = functionService;
-                            mainService._listDBSession = lstDBSession;
-                            mainService._uiDataCatch = uiDataCatch;
-                            mainService._alarmDetail = alarmDetail;
-
+                    if (!mainService.IsAlive)
+                    {
+                        mainService.IsAlive = false;
+                        mainService._logger = logger;
+                        mainService._dbTool = dbTool;
+                        mainService._dbAPI = dbAPI;
+                        mainService._eventQueue = eventQ;
+                        mainService._threadConntroll = threadControll;
+                        mainService._configuration = configuration;
+                        mainService._functionService = functionService;
+                        mainService._listDBSession = lstDBSession;
+                        mainService._uiDataCatch = uiDataCatch;
+                        mainService._alarmDetail = alarmDetail;
 
 
                         try
-                            {
-                                Task taskMainService = new Task(() =>
-                                {
-                                    mainService.Start();
-                                });
-
-                                taskMainService.Start();
-
-                                tmpMsg = String.Format("mainService is alive.");
-                                logger.Info(string.Format("Info: {0}", tmpMsg));
-                                tmpMsg = String.Format("mainService has started.");
-                                logger.Info(string.Format("Info: {0}", tmpMsg));
-                            }
-                            catch (Exception ex)
-                            { 
-                                tmpMsg = string.Format("Main Service create fail. Exception: {0}", ex.Message);
-                                Console.WriteLine(tmpMsg);   
-                                logger.Debug(string.Format("Info: {0}", tmpMsg));
-                            }
-                        }
-
-                        Thread.Sleep(1000);
-
-                        if (!mainService.IsAlive)
                         {
-                            tmpMsg = String.Format("MainService has interrupt.");
+                            Task taskMainService = new Task(() =>
+                            {
+                                mainService.Start();
+                            });
+
+                            taskMainService.Start();
+
+                            tmpMsg = String.Format("mainService is alive.");
+                            logger.Info(string.Format("Info: {0}", tmpMsg));
+                            tmpMsg = String.Format("mainService has started.");
                             logger.Info(string.Format("Info: {0}", tmpMsg));
                         }
+                        catch (Exception ex)
+                        {
+                            tmpMsg = string.Format("Main Service create fail. Exception: {0}", ex.Message);
+                            Console.WriteLine(tmpMsg);
+                            logger.Debug(string.Format("Info: {0}", tmpMsg));
+                        }
+                    }
+
+                    Thread.Sleep(1000);
+
+                    if (!mainService.IsAlive)
+                    {
+                        tmpMsg = String.Format("MainService has interrupt.");
+                        logger.Info(string.Format("Info: {0}", tmpMsg));
+                    }
                     //}
                 }
                 catch (Exception ex)
@@ -260,7 +262,7 @@ RRRRRRRRRRRRRRRTTT       DDDDDDDispatcher  System {0} @ Gyro System Inc.", rtdVe
                     tmpMsg = "";
                     uiDataCatch.Add(msg, "");
                 }
-                catch(Exception ex)
+                catch (Exception ex)
                 {
                     throw;
                 }
@@ -273,7 +275,7 @@ RRRRRRRRRRRRRRRTTT       DDDDDDDispatcher  System {0} @ Gyro System Inc.", rtdVe
             }
         }
 
-        //public IConfiguration Configuration { get; }
+        public IConfiguration Configuration { get; }
 
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
@@ -341,19 +343,37 @@ RRRRRRRRRRRRRRRTTT       DDDDDDDispatcher  System {0} @ Gyro System Inc.", rtdVe
         public static void CreateLogger()
         {
             var config = new LoggingConfiguration();
+            var rtdTarget = new FileTarget
             {
                 FileName = "${basedir}/logs/${shortdate}.log",
                 Layout = "${date:format=yyyy-MM-dd HH\\:mm\\:ss} [${uppercase:${level}}] ${message}",
-                ArchiveAboveSize = 153600000,
+                ArchiveAboveSize = 102400000,
             };
             rtdTarget.ArchiveFileName = "${basedir}/logs/${shortdate}.{#}.log";
+
             config.AddRule(LogLevel.Info, LogLevel.Warn, rtdTarget);
+
             var IssueTarget = new FileTarget
             {
                 FileName = "${basedir}/logs/Issue_${shortdate}.log",
                 Layout = "${date:format=yyyy-MM-dd HH\\:mm\\:ss} [${uppercase:${level}}] ${message}",
-                ArchiveAboveSize = 153600000,
+                ArchiveAboveSize = 102400000,
             };
+            IssueTarget.ArchiveFileName = "${basedir}/logs/Issue_${shortdate}.{#}.log";
+
+            config.AddRule(LogLevel.Error, LogLevel.Error, IssueTarget);
+
+            var DebugTarget = new FileTarget
+            {
+                FileName = "${basedir}/logs/Debug_${shortdate}.log",
+                Layout = "${date:format=yyyy-MM-dd HH\\:mm\\:ss} [${uppercase:${level}}] ${message}",
+                ArchiveAboveSize = 102400000,
+            };
+            //DebugTarget.ArchiveAboveSize = 2;// 2048000;
+            DebugTarget.ArchiveFileName = "${basedir}/logs/Debug_${shortdate}.{#}.log";
+
+            config.AddRule(LogLevel.Debug, LogLevel.Debug, DebugTarget);
+
             LogManager.Configuration = config;
         }
     }

@@ -80,6 +80,7 @@ namespace RTDWebAPI.APP
                 string _sql = "";
                 DataTable dtTemp = null;
                 DataTable dtTemp2 = null;
+                DataTable dtTemp3 = null;
                 bool _serviceExist = false;
                 bool _serviceOn = false;
                 bool _isMasterServer = false;
@@ -113,13 +114,13 @@ namespace RTDWebAPI.APP
 
                                 if (_functionService.TimerTool("minutes", _responseTime) > 1)
                                 {
-                                    _serviceOn = true;
                                     _sql = _BaseDataService.UadateResponseTime(RTDServerName);
                                     _dbTool.SQLExec(_sql, out tmpMsg, true);
 
                                     _sql = _BaseDataService.UadateRTDServer(RTDServerName);
                                     _dbTool.SQLExec(_sql, out tmpMsg, true);
                                 }
+                                _serviceOn = true;
                             }
                             else
                             {
@@ -130,17 +131,13 @@ namespace RTDWebAPI.APP
                                     //update response time for this machine.
                                     _responseTime = dtTemp2.Rows[0]["responseTime"].ToString();
 
-                                    if (_functionService.TimerTool("minutes", _responseTime) > 1)
+                                    if (_functionService.TimerTool("seconds", _responseTime) > 15)
                                     {
                                         _serviceOn = true;
                                         _sql = _BaseDataService.UadateResponseTime(RTDServerName);
                                         _dbTool.SQLExec(_sql, out tmpMsg, true);
-
-                                        _sql = _BaseDataService.UadateRTDServer(RTDServerName);
-                                        _dbTool.SQLExec(_sql, out tmpMsg, true);
                                     }
-                                    else
-                                        _serviceOn = false;
+                                    _serviceOn = false;
                                 }
                                 else
                                 {
@@ -150,7 +147,6 @@ namespace RTDWebAPI.APP
 
                                     _serviceOn = false;
                                 }
-
                             }
                         }
                         else
@@ -216,7 +212,6 @@ namespace RTDWebAPI.APP
                         _alarmDetail
                     };
 
-
                     if (_serviceOn)
                     {
                         try
@@ -237,6 +232,22 @@ namespace RTDWebAPI.APP
                             if (dtTemp.Rows.Count <= 0)
                             {
                                 _serviceOn = false;
+                            }
+                            else
+                            {
+                                _sql = _BaseDataService.QueryResponseTime(dtTemp.Rows[0]["paramvalue"].ToString());
+                                dtTemp2 = dbTool.GetDataTable(_sql);
+                                if (dtTemp2.Rows.Count > 0)
+                                {
+                                    _responseTime = dtTemp2.Rows[0]["responseTime"].ToString();
+
+                                    if (_functionService.TimerTool("seconds", _responseTime) > 10)
+                                    {
+                                        _serviceOn = true;
+                                        _sql = _BaseDataService.UadateResponseTime(RTDServerName);
+                                        _dbTool.SQLExec(_sql, out tmpMsg, true);
+                                    }
+                                }
                             }
                         }
                         catch (Exception ex)
@@ -265,6 +276,7 @@ namespace RTDWebAPI.APP
 
                                     if (_functionService.TimerTool("minutes", _responseTime) > 1)
                                     {
+                                        //Master over 1 minutes no response. change slave to master
                                         _serviceOn = true;
                                         _sql = _BaseDataService.UadateResponseTime(RTDServerName);
                                         _dbTool.SQLExec(_sql, out tmpMsg, true);
@@ -272,7 +284,25 @@ namespace RTDWebAPI.APP
                                         _sql = _BaseDataService.UadateRTDServer(RTDServerName);
                                         _dbTool.SQLExec(_sql, out tmpMsg, true);
                                     }
+                                    else
+                                    {
+                                        _sql = _BaseDataService.QueryResponseTime(RTDServerName);
+                                        dtTemp3 = dbTool.GetDataTable(_sql);
+                                        _responseTime = dtTemp3.Rows[0]["responseTime"].ToString();
+
+                                        if (_functionService.TimerTool("seconds", _responseTime) > 15)
+                                        {
+                                            _serviceOn = true;
+                                            _sql = _BaseDataService.UadateResponseTime(RTDServerName);
+                                            _dbTool.SQLExec(_sql, out tmpMsg, true);
+                                        }
+                                    }
                                 }
+                            }
+                            else
+                            {
+                                if(!_serviceOn)
+                                    _serviceOn = true;
                             }
                         }
 
@@ -716,6 +746,13 @@ namespace RTDWebAPI.APP
 
                                         if (!LotID.Equals(""))
                                         {
+                                            try
+                                            {
+                                                sql = _BaseDataService.WriteNewLocationForCarrier(evtObject, LotID);
+                                                _dbTool.SQLExec(sql, out tmpMsg, true);
+                                            }
+                                            catch (Exception ex) { }
+
                                             //Carrier Location Update時, 檢查 Carrier binding 的lotid 狀態 並更新到 lot_info
                                             _functionService.CheckCurrentLotStatebyWebService(_dbTool, _configuration, _logger, LotID);
                                         }

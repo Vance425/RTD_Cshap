@@ -201,7 +201,7 @@ where a.carrier_id = '{0}'", CarrierID);
             //a.lot_id as lotid, c.lotType, c.stage, c.state, c.CUSTOMERNAME, c.HOLDCODE, c.HOLDREAS
             strSQL = string.Format(@"select distinct a.carrier_id, a.tag_type, a.associate_state, a.lot_id, a.quantity, a.last_lot_id, a.last_change_station,
                                     a.create_by, b.carrier_asso, b.equip_asso, b.equiplist, b.state, b.customername, b.stage, b.partid, b.lottype, 
-                                    b.rtd_state, b.sch_seq, b.islock, b.total_qty, b.lockmachine, b.comp_qty, b.custdevice, b.lotid, b.priority from CARRIER_LOT_ASSOCIATE a
+                                    b.rtd_state, b.sch_seq, b.islock, b.total_qty, b.lockmachine, b.comp_qty, b.custdevice, b.lotid, nvl(b.priority, 0) as priority from CARRIER_LOT_ASSOCIATE a
                                             left join LOT_INFO b on b.lotid = a.lot_id
                                             where a.carrier_id = '{0}'", CarrierID);
             return strSQL;
@@ -1038,6 +1038,18 @@ left join carrier_transfer ct on ct.carrier_id=ca.carrier_id
 
             return strSQL;
         }
+        public string SyncNextStageOfLotNoPriority(string _resourceTable, string _lotid)
+        {
+            string strSQL = "";
+
+            strSQL = string.Format(@"update lot_info set (carrier_asso,equip_asso,equiplist,lastmodify_dt,rtd_state,
+                                        state,wfr_qty,dies_qty,stage,lottype,lot_age,planstarttime,starttime,lockmachine,comp_qty) 
+                                        = (select 'N', 'N', '', sysdate, 'INIT', state,wfr_qty,
+                                        dies_qty,stage,lottype,lot_age,planstarttime,starttime,0,0 from {0} where lotid = '{1}')
+                                        where lotid = '{1}'", _resourceTable, _lotid);
+
+            return strSQL;
+        }
         public string UpdateLotInfoWhenCOMP(string _commandId, string _table)
         {
             //string _table = "workinprocess_sch";
@@ -1426,7 +1438,7 @@ left join carrier_transfer ct on ct.carrier_id=ca.carrier_id
             if (!_EquipID.Equals(""))
                 tmpCoditions = string.Format("and a.equipid = '{0}'", _EquipID);
 
-            string strSQL = string.Format(@"select a.equipid, a.workgroup, b.in_erack, b.out_erack, b.usefailerack, b.f_erack, b.stage, b.QTIME_LOW, b.QTIME_HIGH, b.priority as prio, b.checkeqplookuptable, b.IsFurnace, b.dummy_locate, b.effectiveslot, b.maximumqty, b.checkcustdevice, b.stagecontroller, b.cannotsame, b.aoimeasurement from eqp_status a
+            string strSQL = string.Format(@"select a.equipid, a.workgroup, b.in_erack, b.out_erack, b.usefailerack, b.f_erack, b.stage, b.QTIME_LOW, b.QTIME_HIGH, b.priority as prio, b.checkeqplookuptable, b.IsFurnace, b.dummy_locate, b.effectiveslot, b.maximumqty, b.checkcustdevice, b.stagecontroller, b.cannotsame, b.aoimeasurement, b.rcpconstraint from eqp_status a
                                             left join workgroup_set b on b.workgroup=a.workgroup 
                                             where 1=1 {0}", tmpCoditions);
             return strSQL;
@@ -2712,9 +2724,9 @@ left join rtd_ewlb_qtime_vw d on d.lotid=c.lotid and d.stage=c1.stage and c1.pkg
                 strSQL = string.Format(@"select carr.carrier_id, carr.carrier_state, carr.locate, carr.portno, carr.enable, carr.location_type,carr.metal_ring, carr.quantity, carr.total_qty,
                                     carr.carrier_type, carr.command_type, carr.tag_type, carr.lot_id, carr.carrier_type as carrierType, carr.sch_seq, carr.qtime, carr.minallowabletw, carr.maxallowabletw, 
 Round((carr.qtime-carr.minallowabletw)/nullif((carr.maxallowabletw-carr.minallowabletw), 0), 3) as qTime1,
-case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime < 3 then 'Y' else 'N' end else 'N' end as gonow, carr.custdevice, carr.lot_age from 
+case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime < 3 then 'Y' else 'N' end else 'N' end as gonow, carr.custdevice, carr.lot_age, carr.lot_priority from 
 (select a.carrier_id, a.carrier_state, a.locate, a.portno, a.enable, a.location_type,a.metal_ring, c.quantity, case when d.total_qty is null then 0 else d.total_qty end as total_qty,
-                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(d.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, d.custdevice, d.lot_age from CARRIER_TRANSFER a
+                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(d.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, d.custdevice, d.lot_age, case when d.priority > 70 then d.priority else 0 end as lot_priority from CARRIER_TRANSFER a
                                 left join CARRIER_TYPE_SET b on b.type_key = a.type_key
                                 left join CARRIER_LOT_ASSOCIATE c on c.carrier_id = a.carrier_id
                                 left join LOT_INFO d on d.lotid=c.lot_id
@@ -2722,7 +2734,7 @@ case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime 
                                 where a.enable=1 and a.carrier_state ='ONLINE' and a.state not in ('HOLD','SYSHOLD') and a.reserve = 0 and a.uat=0 and d.state not in ('HOLD')
                                     and a.location_type in ('ERACK','STK') and b.carrier_type in ( select carrier_type_key from port_type_asso where carrier_type = '{3}') and c.lot_id is not null ) carr 
                                     left join rack rack on rack.""erackID""=carr.locate {2}
-                                    order by gonow desc, qtime1 desc, sch_seq", _adsTable, _qTimeTable, _strWhere, _carrierType);
+                                    order by gonow desc, lot_priority desc, qtime1 desc, sch_seq", _adsTable, _qTimeTable, _strWhere, _carrierType);
 #else
 
 if(_layerFirst)
@@ -2730,9 +2742,9 @@ if(_layerFirst)
 strSQL = string.Format(@"select carr.carrier_id, carr.carrier_state, carr.locate, carr.portno, carr.enable, carr.location_type,carr.metal_ring, carr.quantity, carr.total_qty,
                                     carr.carrier_type, carr.command_type, carr.tag_type, carr.lot_id, carr.carrier_type as carrierType, carr.sch_seq, carr.qtime, carr.minallowabletw, carr.maxallowabletw, 
 Round((carr.qtime-carr.minallowabletw)/nullif((carr.maxallowabletw-carr.minallowabletw), 0), 3) as qTime1,
-case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime < 3 then 'Y' else 'N' end else 'N' end as gonow, carr.wpriority, carr.custdevice, carr.lot_age from 
+case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime < 3 then 'Y' else 'N' end else 'N' end as gonow, carr.wpriority, carr.custdevice, carr.lot_age, carr.lot_priority from 
 (select a.carrier_id, a.carrier_state, a.locate, a.portno, a.enable, a.location_type,a.metal_ring, c.quantity, case when d.total_qty is null then 0 else d.total_qty end as total_qty,
-                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(d.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, nvl(g.priority, 20) as wPriority, d.custdevice, d.lot_age from CARRIER_TRANSFER a
+                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(d.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, nvl(g.priority, 20) as wPriority, d.custdevice, d.lot_age, case when d.priority > 70 then d.priority else 0 end as lot_priority from CARRIER_TRANSFER a
                                 left join CARRIER_TYPE_SET b on b.type_key = a.type_key
                                 left join CARRIER_LOT_ASSOCIATE c on c.carrier_id = a.carrier_id
                                 left join LOT_INFO d on d.lotid=c.lot_id
@@ -2741,16 +2753,16 @@ case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime 
                                 where a.enable=1 and a.carrier_state ='ONLINE' and a.state not in ('HOLD','SYSHOLD') and a.reserve = 0 and a.uat=0 and d.state not in ('HOLD')
                                     and a.location_type in ('ERACK','STK') and b.carrier_type in ( select carrier_type_key from port_type_asso where carrier_type = '{3}') and c.lot_id is not null ) carr 
                                     left join rack rack on rack.""erackID""=carr.locate {2}
-                                    order by gonow desc, qtime1 desc, wpriority desc, sch_seq", _adsTable, _qTimeTable, _strWhere, _carrierType, _workgroup);
+                                    order by gonow desc, lot_priority desc, qtime1 desc, wpriority desc, sch_seq", _adsTable, _qTimeTable, _strWhere, _carrierType, _workgroup);
 }
 else
 {
 strSQL = string.Format(@"select carr.carrier_id, carr.carrier_state, carr.locate, carr.portno, carr.enable, carr.location_type,carr.metal_ring, carr.quantity, carr.total_qty,
                                     carr.carrier_type, carr.command_type, carr.tag_type, carr.lot_id, carr.carrier_type as carrierType, carr.sch_seq, carr.qtime, carr.minallowabletw, carr.maxallowabletw, 
 Round((carr.qtime-carr.minallowabletw)/nullif((carr.maxallowabletw-carr.minallowabletw), 0), 3) as qTime1,
-case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime < 3 then 'Y' else 'N' end else 'N' end as gonow, carr.custdevice, carr.lot_age from 
+case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime < 3 then 'Y' else 'N' end else 'N' end as gonow, carr.custdevice, carr.lot_age, carr.lot_priority from 
 (select a.carrier_id, a.carrier_state, a.locate, a.portno, a.enable, a.location_type,a.metal_ring, c.quantity, case when d.total_qty is null then 0 else d.total_qty end as total_qty,
-                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(d.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, d.custdevice, d.lot_age from CARRIER_TRANSFER a
+                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(d.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, d.custdevice, d.lot_age, case when d.priority > 70 then d.priority else 0 end as lot_priority from CARRIER_TRANSFER a
                                 left join CARRIER_TYPE_SET b on b.type_key = a.type_key
                                 left join CARRIER_LOT_ASSOCIATE c on c.carrier_id = a.carrier_id
                                 left join LOT_INFO d on d.lotid=c.lot_id
@@ -2758,7 +2770,7 @@ case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime 
                                 where a.enable=1 and a.carrier_state ='ONLINE' and a.state not in ('HOLD','SYSHOLD') and a.reserve = 0 and a.uat=0 and d.state not in ('HOLD')
                                     and a.location_type in ('ERACK','STK') and b.carrier_type in ( select carrier_type_key from port_type_asso where carrier_type = '{3}') and c.lot_id is not null ) carr 
                                     left join rack rack on rack.""erackID""=carr.locate {2}
-                                    order by gonow desc, qtime1 desc, sch_seq", _adsTable, _qTimeTable, _strWhere, _carrierType);
+                                    order by gonow desc, lot_priority desc, qtime1 desc, sch_seq", _adsTable, _qTimeTable, _strWhere, _carrierType);
 }
 #endif
             }
@@ -2802,9 +2814,9 @@ case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime 
                 strSQL = string.Format(@"select layer, carr.carrier_id, carr.carrier_state, carr.locate, carr.portno, carr.enable, carr.location_type,carr.metal_ring, carr.quantity, carr.total_qty,
                                     carr.carrier_type, carr.command_type, carr.tag_type, carr.lot_id, carr.carrier_type as carrierType, carr.sch_seq, carr.qtime, carr.minallowabletw, carr.maxallowabletw, 
 round(nvl((carr.qtime-carr.minallowabletw)/nullif((carr.maxallowabletw-carr.minallowabletw), 0), 0), 3) as qTime1,
-case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime < 3 then 'Y' else 'N' end else 'N' end as gonow, carr.custdevice, carr.lot_age from 
+case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime < 3 then 'Y' else 'N' end else 'N' end as gonow, carr.custdevice, carr.lot_age, carr.lot_priority from 
 (select substr(d.stage, 0, 3) as layer, a.carrier_id, a.carrier_state, a.locate, a.portno, a.enable, a.location_type,a.metal_ring, c.quantity, case when d.total_qty is null then 0 else d.total_qty end as total_qty,
-                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(d.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, d.custdevice, d.lot_age from CARRIER_TRANSFER a
+                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(d.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, d.custdevice, d.lot_age, case when d.priority > 70 then d.priority else 0 end as lot_priority from CARRIER_TRANSFER a
                                 left join CARRIER_TYPE_SET b on b.type_key = a.type_key
                                 left join CARRIER_LOT_ASSOCIATE c on c.carrier_id = a.carrier_id
                                 left join LOT_INFO d on d.lotid=c.lot_id
@@ -2812,16 +2824,16 @@ case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime 
                                 where a.enable=1 and a.carrier_state ='ONLINE' and a.state not in ('HOLD','SYSHOLD') and a.reserve = 0 and a.uat=1 and d.state not in ('HOLD')
                                     and a.location_type in ('ERACK','STOCKER') and b.carrier_type in ( select carrier_type_key from port_type_asso where carrier_type = '{3}') and c.lot_id is not null ) carr 
                                     left join rack rack on rack.""erackID""=carr.locate {2}
-                                    order by layer desc, eotd(carr.lot_id), gonow desc, qtime1 desc, sch_seq", _adsTable, _qTimeTable, _strWhere, _carrierType);
+                                    order by lot_priority desc, layer desc, eotd(carr.lot_id), gonow desc, qtime1 desc, sch_seq", _adsTable, _qTimeTable, _strWhere, _carrierType);
 #else
 if(_layerFirst)
 {
 strSQL = string.Format(@"select layer, carr.carrier_id, carr.carrier_state, carr.locate, carr.portno, carr.enable, carr.location_type,carr.metal_ring, carr.quantity, carr.total_qty,
                                     carr.carrier_type, carr.command_type, carr.tag_type, carr.lot_id, carr.carrier_type as carrierType, carr.sch_seq, carr.qtime, carr.minallowabletw, carr.maxallowabletw, 
 round(nvl((carr.qtime-carr.minallowabletw)/nullif((carr.maxallowabletw-carr.minallowabletw), 0), 0), 3) as qTime1,
-case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime < 3 then 'Y' else 'N' end else 'N' end as gonow, carr.wpriority, carr.custdevice, carr.lot_age from 
+case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime < 3 then 'Y' else 'N' end else 'N' end as gonow, carr.wpriority, carr.custdevice, carr.lot_age, carr.lot_priority from 
 (select substr(d.stage, 0, 3) as layer, a.carrier_id, a.carrier_state, a.locate, a.portno, a.enable, a.location_type,a.metal_ring, c.quantity, case when d.total_qty is null then 0 else d.total_qty end as total_qty,
-                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(d.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, nvl(g.priority, 20) as wPriority, d.custdevice, d.lot_age from CARRIER_TRANSFER a
+                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(d.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, nvl(g.priority, 20) as wPriority, d.custdevice, d.lot_age, case when d.priority > 70 then d.priority else 0 end as lot_priority from CARRIER_TRANSFER a
                                 left join CARRIER_TYPE_SET b on b.type_key = a.type_key
                                 left join CARRIER_LOT_ASSOCIATE c on c.carrier_id = a.carrier_id
                                 left join LOT_INFO d on d.lotid=c.lot_id
@@ -2830,16 +2842,16 @@ case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime 
                                 where a.enable=1 and a.carrier_state ='ONLINE' and a.state not in ('HOLD','SYSHOLD') and a.reserve = 0 and a.uat=1 and d.state not in ('HOLD')
                                     and a.location_type in ('ERACK','STK') and b.carrier_type in ( select carrier_type_key from port_type_asso where carrier_type = '{3}') and c.lot_id is not null ) carr 
                                     left join rack rack on rack.""erackID""=carr.locate {2}
-                                    order by layer desc, eotd(carr.lot_id), gonow desc, qtime1 desc, wpriority desc, sch_seq", _adsTable, _qTimeTable, _strWhere, _carrierType, _workgroup);
+                                    order by lot_priority desc, layer desc, eotd(carr.lot_id), gonow desc, qtime1 desc, wpriority desc, sch_seq", _adsTable, _qTimeTable, _strWhere, _carrierType, _workgroup);
 }
 else
 {
 strSQL = string.Format(@"select layer, carr.carrier_id, carr.carrier_state, carr.locate, carr.portno, carr.enable, carr.location_type,carr.metal_ring, carr.quantity, carr.total_qty,
                                     carr.carrier_type, carr.command_type, carr.tag_type, carr.lot_id, carr.carrier_type as carrierType, carr.sch_seq, carr.qtime, carr.minallowabletw, carr.maxallowabletw, 
 round(nvl((carr.qtime-carr.minallowabletw)/nullif((carr.maxallowabletw-carr.minallowabletw), 0), 0), 3) as qTime1,
-case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime < 3 then 'Y' else 'N' end else 'N' end as gonow, carr.custdevice, carr.lot_age from 
+case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime < 3 then 'Y' else 'N' end else 'N' end as gonow, carr.custdevice, carr.lot_age, carr.lot_priority from 
 (select substr(d.stage, 0, 3) as layer, a.carrier_id, a.carrier_state, a.locate, a.portno, a.enable, a.location_type,a.metal_ring, c.quantity, case when d.total_qty is null then 0 else d.total_qty end as total_qty,
-                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(d.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, d.custdevice, d.lot_age from CARRIER_TRANSFER a
+                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(d.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, d.custdevice, d.lot_age, case when d.priority > 70 then d.priority else 0 end as lot_priority from CARRIER_TRANSFER a
                                 left join CARRIER_TYPE_SET b on b.type_key = a.type_key
                                 left join CARRIER_LOT_ASSOCIATE c on c.carrier_id = a.carrier_id
                                 left join LOT_INFO d on d.lotid=c.lot_id
@@ -2847,7 +2859,7 @@ case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime 
                                 where a.enable=1 and a.carrier_state ='ONLINE' and a.state not in ('HOLD','SYSHOLD') and a.reserve = 0 and a.uat=1 and d.state not in ('HOLD')
                                     and a.location_type in ('ERACK','STK') and b.carrier_type in ( select carrier_type_key from port_type_asso where carrier_type = '{3}') and c.lot_id is not null ) carr 
                                     left join rack rack on rack.""erackID""=carr.locate {2}
-                                    order by layer desc, eotd(carr.lot_id), gonow desc, qtime1 desc, sch_seq", _adsTable, _qTimeTable, _strWhere, _carrierType);
+                                    order by lot_priority desc, layer desc, eotd(carr.lot_id), gonow desc, qtime1 desc, sch_seq", _adsTable, _qTimeTable, _strWhere, _carrierType);
 }
 #endif
             }
@@ -3925,6 +3937,51 @@ values('ResponseTime', 'ResponseTime', '{0}', 'RTD', sysdate, 'RTD server respon
         {
             //231030V1.0 增加Lookup Table for Check the equip can do this product logic
             string strSQL = string.Format(@"select rcpconstraint_list from {0} where lotid='{1}' and rcpconstraint_list like '%{2}%'", _table, _lotid, _equip);
+
+            return strSQL;
+        }
+        public string WriteNewLocationForCarrier(CarrierLocationUpdate _carrierLocation, string _lotid)
+        {
+            string strSQL = string.Format(@"insert into CarrierLocationHistory (CarrierID, Zone, Location, LocationType, CreatedAt, LotID)
+values ('{0}','{1}','{2}','{3}',sysdate, '{4}')", _carrierLocation.CarrierID, _carrierLocation.Zone, _carrierLocation.Location, _carrierLocation.LocationType, _lotid);
+
+            return strSQL;
+        }
+        public string SetWorkgroupSetByWorkgroupStage(string _Workgroup, string _Stage, string _params, bool _Sw)
+        {
+            string tmpSet = "";
+            string strSQL = "";
+            int iPreTransfer = -1;
+
+            if (!_Workgroup.Equals(""))
+            {
+                strSQL = string.Format("where workgroup = '{0}'", _Workgroup);
+
+                if (!_Stage.Equals(""))
+                    strSQL = string.Format("{0} and stage = {1}", strSQL, _Stage);
+
+                if (_Sw)
+                {
+                    tmpSet = string.Format("set {0} = 1", _params);
+                }
+                else
+                {
+                    tmpSet = string.Format("set {0} = 0", _params);
+                }
+
+                if (!tmpSet.Equals(""))
+                    tmpSet = string.Format("{0},Modify_dt = {1},lastModify_dt = {1}", tmpSet, "sysdate");
+                else
+                    tmpSet = string.Format("lastModify_dt = {0}", tmpSet, "sysdate");
+            }
+            else
+            {
+                strSQL = string.Format("where workgroup = 'None'");
+                tmpSet = string.Format("lastModify_dt = {0}", tmpSet, "sysdate");
+            }
+
+            strSQL = string.Format(@"update workgroup_set {0} {1}
+                                            ", tmpSet, strSQL);
 
             return strSQL;
         }
