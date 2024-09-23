@@ -37,7 +37,7 @@ namespace RTDWebAPI
         public Startup(IConfiguration configuration)
         {
             Configuration = configuration;
-            string rtdVer = "Version 1.0.24.0902.1.0.1";
+            string rtdVer = "Version 1.0.24.1009.1.0.1";
             string msg = "";
             string tmpMsg = "";
             //DBPool dbPool = null;

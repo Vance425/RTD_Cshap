@@ -1864,6 +1864,7 @@ namespace RTDWebAPI.Controllers
             APIResult tmpResult;
             string funcName = "SwitchMachineReworkMode";
             string tmpMsg = "";
+            string tmpMessage = "";
             int iExecuteMode = 1;
             DataTable dt = null;
             DataTable dtTemp = null;
@@ -1872,6 +1873,7 @@ namespace RTDWebAPI.Controllers
             string tmpWorkGroup = "";
             List<string> tmpp;
             IBaseDataService _BaseDataService = new BaseDataService();
+            bool isFurnace = false;
 
             try
             {
@@ -1897,6 +1899,7 @@ namespace RTDWebAPI.Controllers
                     string descTemp = isManualMode.Equals(true) ? "Manual" : "Auto";
                     string _args = "";
                     tmpWorkGroup = dt.Rows[0]["workgroup"].ToString();
+                    Boolean _statechange = false;
 
                     if (_expired)
                     {
@@ -1916,6 +1919,7 @@ namespace RTDWebAPI.Controllers
                                 tmpp.Add("0");
 
                             tmpResult = _functionService.SentCommandtoMCSByModel(_configuration, _logger, "SwitchMode", tmpp);
+                            _statechange = true;
                         }
                     }
                     else
@@ -1936,6 +1940,8 @@ namespace RTDWebAPI.Controllers
                                 tmpp.Add("0");
 
                             tmpResult = _functionService.SentCommandtoMCSByModel(_configuration, _logger, "SwitchMode", tmpp);
+
+                            _statechange = true;
                         }
 
                         if (isManualMode)
@@ -1948,6 +1954,37 @@ namespace RTDWebAPI.Controllers
                                 _dbTool.SQLExec(sql, out tmpMsg, true);
                                 if (!tmpMsg.Equals(""))
                                     _logger.Debug(tmpMsg);
+                            }
+                        }
+
+                        if (_statechange)
+                        {
+                            if (isManualMode)
+                            {
+                                ///20241024 When from manual mode change to auto mode, do logic
+
+                                dtTemp = _dbTool.GetDataTable(_BaseDataService.SelectWorkgroupSet(value.EquipID));
+
+                                //SelectWorkgroupSet
+                                if (dtTemp.Rows.Count > 0)
+                                {
+                                    isFurnace = dtTemp.Rows[0]["IsFurnace"] is null ? false : dtTemp.Rows[0]["IsFurnace"].ToString().Equals("1") ? true : false;
+
+                                    if (isFurnace)
+                                    {
+                                        sql = _BaseDataService.ResetFurnaceState(value.EquipID);
+                                        _dbTool.SQLExec(sql, out tmpMsg, true);
+
+                                        sql = _BaseDataService.ResetWorkgroupforFurnace(value.EquipID);
+                                        _dbTool.SQLExec(sql, out tmpMsg, true);
+
+                                        if (tmpMsg.Equals(""))
+                                        {
+                                            tmpMessage = string.Format("Reset Furnace success. userid [{0}].", "Change to manual mode");
+                                            _logger.Info(tmpMessage);
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

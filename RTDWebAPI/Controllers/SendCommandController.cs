@@ -64,6 +64,7 @@ namespace RTDWebAPI.Controllers
                 tmpp.Add(value.HoldReas);
                 tmpp.Add(value.POTD);
                 tmpp.Add(value.WaferLot);
+                tmpp.Add("true");
 
                 foo = _functionService.SentCommandtoMCSByModel(_configuration, _logger, "InfoUpdate", tmpp);
             }

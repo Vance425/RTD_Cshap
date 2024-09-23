@@ -1053,14 +1053,14 @@ left join carrier_transfer ct on ct.carrier_id=ca.carrier_id
         public string UpdateLotInfoWhenCOMP(string _commandId, string _table)
         {
             //string _table = "workinprocess_sch";
-            string strSQL = string.Format(@"update lot_info set RTD_state='COMPLETED', sch_seq=0, lastModify_dt=sysdate where lotid = (
+            string strSQL = string.Format(@"update lot_info set RTD_state='COMPLETED', sch_seq=0, lastModify_dt=sysdate where lotid in (
                                             select distinct lotid from {0} where cmd_id = '{1}' and lotid <> ' ')", _table, _commandId);
             return strSQL;
         }
         public string UpdateLotInfoWhenFail(string _commandId, string _table)
         {
             //string _table = "workinprocess_sch";
-            string strSQL = string.Format(@"update lot_info set RTD_state='READY', sch_seq=0, lastModify_dt=sysdate where lotid = (
+            string strSQL = string.Format(@"update lot_info set RTD_state='READY', sch_seq=0, lastModify_dt=sysdate where lotid in (
                                             select distinct lotid from {0} where cmd_id = '{1}' and lotid <> ' ')", _table, _commandId);
             return strSQL;
         }
@@ -1350,7 +1350,7 @@ left join carrier_transfer ct on ct.carrier_id=ca.carrier_id
             string strSQL = "";
             string strSet = "";
 
-            strSQL = string.Format("select distinct a.carrier_id, a.lot_id, b.locate, b.portno, b.location_type, c.customername, c.partid, c.lottype, c.stage, a.quantity, d.stage as stage1 from CARRIER_LOT_ASSOCIATE a left join CARRIER_TRANSFER b on b.carrier_id = a.carrier_id left join LOT_INFO c on c.lotid = a.lot_id left join {0} d on c.lotid = d.lotid where b.location_type = 'ERACK' and a.lot_id is not null and locate is not null", _table);
+            strSQL = string.Format("select distinct a.carrier_id, a.lot_id, b.locate, b.portno, b.location_type, c.customername, c.partid, c.lottype, c.stage, a.quantity, d.stage as stage1, nvl(to_char(info_update_dt, 'yyyy/MM/dd HH24:mi:ss;'), 'NULL') info_update_dt from CARRIER_LOT_ASSOCIATE a left join CARRIER_TRANSFER b on b.carrier_id = a.carrier_id left join LOT_INFO c on c.lotid = a.lot_id left join {0} d on c.lotid = d.lotid where b.location_type = 'ERACK' and a.lot_id is not null and locate is not null", _table);
             return strSQL;
         }
         public string ResetCarrierLotAssociateNewBind(string _carrierId)
@@ -1438,7 +1438,7 @@ left join carrier_transfer ct on ct.carrier_id=ca.carrier_id
             if (!_EquipID.Equals(""))
                 tmpCoditions = string.Format("and a.equipid = '{0}'", _EquipID);
 
-            string strSQL = string.Format(@"select a.equipid, a.workgroup, b.in_erack, b.out_erack, b.usefailerack, b.f_erack, b.stage, b.QTIME_LOW, b.QTIME_HIGH, b.priority as prio, b.checkeqplookuptable, b.IsFurnace, b.dummy_locate, b.effectiveslot, b.maximumqty, b.checkcustdevice, b.stagecontroller, b.cannotsame, b.aoimeasurement, b.rcpconstraint from eqp_status a
+            string strSQL = string.Format(@"select a.equipid, a.workgroup, b.in_erack, b.out_erack, b.usefailerack, b.f_erack, b.stage, b.pretransfer, b.QTIME_LOW, b.QTIME_HIGH, b.priority as prio, b.checkeqplookuptable, b.uselaststage, b.IsFurnace, b.dummy_locate, b.effectiveslot, b.maximumqty, b.checkcustdevice, b.stagecontroller, b.cannotsame, b.aoimeasurement, b.rcpconstraint, b.wip_warehouse, b.enablewipwarehouse, b.bindworkgroup, b.preparenextworkgroup, b.nextworkgroup, b.prepareqty, b.sidewarehouse, b.swsidewh, b.onlysidewh, b.limitforsidewh, b.preparecarrierforsidewh, b.cannot, b.dummycarrier from eqp_status a
                                             left join workgroup_set b on b.workgroup=a.workgroup 
                                             where 1=1 {0}", tmpCoditions);
             return strSQL;
@@ -1726,7 +1726,7 @@ left join carrier_transfer ct on ct.carrier_id=ca.carrier_id
 
             strSQL = string.Format(@"select distinct a.carrier_id, a.carrier_type, a.associate_state, a.lot_id, a.quantity, b.type_key, b.carrier_state, b.locate, b.portno, 
                                 b.enable, b.location_type, b.metal_ring, b.reserve, b.state, c.equiplist, c.state, c.customername, c.stage, c.partid,
-                                c.lotType, c.rtd_state, c.total_qty from CARRIER_LOT_ASSOCIATE a 
+                                c.lotType, c.rtd_state, c.total_qty, b.info_update_dt from CARRIER_LOT_ASSOCIATE a 
                                 left join CARRIER_TRANSFER b on b.carrier_id=a.carrier_id 
                                 left join LOT_INFO c on c.lotid = a.lot_id {0}", tmpWhere);
             return strSQL;
@@ -2029,11 +2029,11 @@ order by layer desc, eotd(g.lot_id) asc, gonow desc, qtime1 desc, priority desc,
 
             if (_manualMode)
             {
-                strSQL = String.Format("update eqp_status set manualmode = 1 where equipid = '{0}'", _equip);
+                strSQL = String.Format("update eqp_status set manualmode=1, modify_dt=sysdate where equipid = '{0}'", _equip);
             }
             else
             {
-                strSQL = String.Format("update eqp_status set manualmode = 0 where equipid = '{0}'", _equip);
+                strSQL = String.Format("update eqp_status set manualmode=0, modify_dt=sysdate where equipid = '{0}'", _equip);
             }
 
             return strSQL;
@@ -2481,7 +2481,7 @@ order by layer desc, eotd(g.lot_id) asc, gonow desc, qtime1 desc, priority desc,
         {
             //string _table = "workinprocess_sch";
 
-            string strSQL = string.Format(@"select * from {0} where create_dt + numtodsinterval({1},'minute') < sysdate and cmd_current_state = 'Initial'", _table, _overtime);
+            string strSQL = string.Format(@"select * from {0} where create_dt + numtodsinterval({1},'minute') < sysdate and cmd_current_state in ('Initial', ' ')", _table, _overtime);
 
             return strSQL;
         }
@@ -2995,7 +2995,7 @@ where b.location_type in ('ERACK','MR','STOCKER') and c.pkgfullname is not null 
                 return strSQL;
 
             if (!_eotd.Equals(""))
-                tmpSet = string.Format(@"eotd = '{0}'", _eotd);
+                tmpSet = string.Format(@"enddate = '{0}'", _eotd);
 
             if (!tmpSet.Equals(""))
                 strSet = string.Format(@"set {0}", tmpSet);
@@ -3265,7 +3265,7 @@ case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime 
                                 where a.enable=1 and a.carrier_state ='ONLINE' and a.state not in ('HOLD','SYSHOLD') and a.reserve = 0 and a.uat=0 and (d.state not in ('HOLD') or d.state is null)
                                     and a.location_type in ('ERACK','STK') and b.carrier_type in ( select carrier_type_key from port_type_asso where carrier_type = '{3}') ) carr 
                                     left join rack rack on rack.""erackID""=carr.locate {2}
-                                    order by carr.lot_id asc, qtime1 desc, sch_seq", _adsTable, _qTimeTable, _strWhere, _carrierType);
+                                    order by carr.lot_id asc, qtime desc, sch_seq", _adsTable, _qTimeTable, _strWhere, _carrierType);
 #else
                     strSQL = string.Format(@"select carr.carrier_id, carr.carrier_state, carr.locate, carr.portno, carr.enable, carr.location_type,carr.metal_ring, carr.quantity, carr.total_qty,
                                     carr.carrier_type, carr.command_type, carr.tag_type, carr.lot_id, carr.carrier_type as carrierType, carr.sch_seq, carr.qtime, carr.minallowabletw, carr.maxallowabletw, 
@@ -3280,7 +3280,7 @@ case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime 
                                 where a.enable=1 and a.carrier_state ='ONLINE' and a.state not in ('HOLD','SYSHOLD') and a.reserve = 0 and a.uat=0 and (d.state not in ('HOLD') or d.state is null)
                                     and a.location_type in ('ERACK','STK') and b.carrier_type in ( select carrier_type_key from port_type_asso where carrier_type = '{3}') ) carr 
                                     left join rack rack on rack.""erackID""=carr.locate {2}
-                                    order by  carr.lot_id asc, qtime1 desc, sch_seq", _adsTable, _qTimeTable, _strWhere, _carrierType);
+                                    order by  carr.lot_id asc, qtime desc, sch_seq", _adsTable, _qTimeTable, _strWhere, _carrierType);
 #endif
                 }
                 else
@@ -3312,7 +3312,8 @@ where a.isfurnace = 1 and b.fvcstatus not in (1,2) and b.equipid is not null");
         }
         public string QueryFurneceOutErack(string _equipid)
         {
-            string strSQL = string.Format(@"select a.workgroup, c.carrier_type, a.equipid, b.in_erack, b.out_erack, b.dummy_locate, b.minmumQty, b.maximumQty from eqp_status a 
+            string strSQL = string.Format(@"select a.workgroup, c.carrier_type, a.equipid, b.in_erack, b.out_erack, b.dummy_locate, b.minmumQty, b.maximumQty, 
+b.sidewarehouse from eqp_status a 
 left join workgroup_set b on b.workgroup=a.workgroup
 left join eqp_port_set c on c.equipid=a.equipid and c.port_seq=1
 where b.isfurnace = 1 and a.equipid = '{0}'", _equipid);
@@ -3437,7 +3438,7 @@ union select eqpid, recipe_group_4 as recipeID, 'recipe_g4' as recipe_group from
         }
         public string QueryCarrierOnRack(string _workgroup, string _equip)
         {
-            string strSQL = string.Format(@"select d.lot_id, d.carrier_id from (select b.lot_id, a.carrier_id from carrier_transfer a left join carrier_lot_associate b on b.carrier_id = a.carrier_id where a.carrier_state = 'ONLINE' and a.location_type = 'ERACK' and a.locate in (select ""erackID"" from rack where ""groupID"" in (select in_erack from workgroup_set where workgroup = '{0}') union select ""erackID"" from rack where ""erackID"" in (select in_erack from workgroup_set where workgroup = '{0}'))) d left join lot_info c on c.lotid = d.lot_id where instr(c.equiplist, '{1}') <= 0", _workgroup, _equip);
+            string strSQL = string.Format(@"select d.lot_id, d.carrier_id from (select b.lot_id, a.carrier_id from carrier_transfer a left join carrier_lot_associate b on b.carrier_id = a.carrier_id where a.carrier_state = 'ONLINE' and a.location_type in ('ERACK') and a.locate in (select ""erackID"" from rack where ""groupID"" in (select in_erack from workgroup_set where workgroup = '{0}')) union select b.lot_id, a.carrier_id from carrier_transfer a left join carrier_lot_associate b on b.carrier_id = a.carrier_id where a.carrier_state = 'ONLINE' and a.location_type in ('STK') and a.locate like (select ""erackID"" || '%' from rack where ""erackID"" in (select in_erack from workgroup_set where workgroup = '{0}'))) d left join lot_info c on c.lotid = d.lot_id where instr(c.equiplist, '{1}') <= 0", _workgroup, _equip);
 
             return strSQL;
         }
@@ -3958,7 +3959,7 @@ values ('{0}','{1}','{2}','{3}',sysdate, '{4}')", _carrierLocation.CarrierID, _c
                 strSQL = string.Format("where workgroup = '{0}'", _Workgroup);
 
                 if (!_Stage.Equals(""))
-                    strSQL = string.Format("{0} and stage = {1}", strSQL, _Stage);
+                    strSQL = string.Format("{0} and stage = '{1}'", strSQL, _Stage);
 
                 if (_Sw)
                 {
@@ -3982,6 +3983,430 @@ values ('{0}','{1}','{2}','{3}',sysdate, '{4}')", _carrierLocation.CarrierID, _c
 
             strSQL = string.Format(@"update workgroup_set {0} {1}
                                             ", tmpSet, strSQL);
+
+            return strSQL;
+        }
+        public string QueryCommandsTypeByCarrierID(string _carrierID)
+        {
+            string strSQL = string.Format(@"select distinct a.carrier_id, b.command_type from carrier_transfer a
+left join carrier_type_set b on b.type_key=a.type_key
+where carrier_id = '{0}'", _carrierID);
+
+            return strSQL;
+        }
+        public string QueryMaxPriorityByCmdID(string _commandID)
+        {
+            string strSQL = string.Format(@"select cmd_id, cmd_type,equipid, carrierid, carriertype,source,dest,priority from workinprocess_sch where replace=1 and cmd_id  ='{0}' order by priority desc", _commandID);
+
+            return strSQL;
+        }
+        public string QueryStageControl()
+        {
+            string strSQL = string.Format(@"select * from eqp_port_detail");
+
+            return strSQL;
+        }
+        public string CloneWorkgroupsForWorkgroupSetByWorkgroup(string _newWorkgroup, string _Workgroup)
+        {
+            string strSQL = string.Format(@"insert into workgroup_set (workgroup,in_erack,out_erack,create_dt,modify_dt,lastmodify_dt,pretransfer,usefailerack,f_erack,stage,qtime_low,qtime_high,checkeqplookuptable,priority,noqtimecarriertype,uselaststage,stagecontroller,rcpconstraint) 
+select '{0}',in_erack,out_erack,create_dt,modify_dt,lastmodify_dt,pretransfer,usefailerack,f_erack,stage,qtime_low,qtime_high,checkeqplookuptable,priority,noqtimecarriertype,uselaststage,stagecontroller,rcpconstraint from workgroup_set
+where workgroup='{1}'", _newWorkgroup, _Workgroup);
+            return strSQL;
+        }
+        public string CloneStageForWorkgroupSetByWorkgroupStage(string _newStage, string _workgroup, string _stage)
+        {
+            string strSQL = string.Format(@"insert into workgroup_set (workgroup,in_erack,out_erack,create_dt,modify_dt,lastmodify_dt,pretransfer,usefailerack,f_erack,stage,qtime_low,qtime_high,checkeqplookuptable,priority,noqtimecarriertype,uselaststage,stagecontroller,rcpconstraint) 
+select workgroup,in_erack,out_erack,create_dt,modify_dt,lastmodify_dt,pretransfer,usefailerack,f_erack,'{0}',qtime_low,qtime_high,checkeqplookuptable,priority,noqtimecarriertype,uselaststage,stagecontroller,rcpconstraint from workgroup_set
+where workgroup='{1}' and stage='{2}'", _newStage, _workgroup, _stage);
+            return strSQL;
+        }
+        public string SetParameterWorkgroupSetByWorkgroupStage(string _Workgroup, string _Stage, string _paramsName, object _paramsValue)
+        {
+            string tmpSet = "";
+            string strSQL = "";
+            string tmpType = _paramsValue.GetType().ToString();
+
+            if (!_Workgroup.Equals(""))
+            {
+                strSQL = string.Format("where workgroup = '{0}'", _Workgroup);
+
+                if (!_Stage.Equals(""))
+                    strSQL = string.Format("{0} and stage = '{1}'", strSQL, _Stage);
+
+                if (!_paramsValue.Equals(""))
+                {
+                    tmpSet = string.Format("set {0}={1}", _paramsName, _paramsValue.GetType().ToString().Equals("System.Int32") ? string.Format("{0}", _paramsValue) : string.Format("'{0}'", _paramsValue));
+                }
+
+                if (!tmpSet.Equals(""))
+                    tmpSet = string.Format("{0},Modify_dt = {1},lastModify_dt = {1}", tmpSet, "sysdate");
+                else
+                    tmpSet = string.Format("lastModify_dt = {0}", tmpSet, "sysdate");
+            }
+            else
+            {
+                strSQL = string.Format("where workgroup = 'None'");
+                tmpSet = string.Format("lastModify_dt = {0}", tmpSet, "sysdate");
+            }
+
+            strSQL = string.Format(@"update workgroup_set {0} {1}
+                                            ", tmpSet, strSQL);
+
+            return strSQL;
+        }
+        public string QueryAllMidways(QueryMidways _cond)
+        {
+            string strSQL = "";
+            string tmpSQL = "select * from rtd_midways";
+            string strWhere = "";
+            string tmpWhere = "";
+
+            if (!_cond.Workgroup.Equals(""))
+                tmpWhere = string.Format("where workgroup='{0}'", _cond.Workgroup);
+            else
+            {
+                strSQL = tmpSQL;
+                return strSQL;
+            }
+
+            if (!_cond.Stage.Equals(""))
+            {
+                tmpWhere = string.Format("{0} and stage='{1}'", tmpWhere, _cond.Stage);
+            }
+            else
+                tmpWhere = tmpWhere;
+
+            if (!_cond.Midway.Equals(""))
+            {
+                tmpWhere = string.Format("{0} and midway_point='{1}'", tmpWhere, _cond.Midway);
+            }
+            else
+                tmpWhere = tmpWhere;
+
+            if (!_cond.CurrentLocate.Equals(""))
+            {
+                tmpWhere = string.Format("{0} and current_locate='{1}'", tmpWhere, _cond.CurrentLocate);
+            }
+            else
+                tmpWhere = tmpWhere;
+
+            strSQL = string.Format(@"{0} {1}", tmpSQL, tmpWhere);
+
+            return strSQL;
+        }
+        public string QueryMidways(QueryMidways _cond)
+        {
+            string strSQL = "";
+            string tmpSQL = "select * from rtd_midways";
+            string strWhere = "";
+            string tmpWhere = "";
+
+            if(!_cond.Workgroup.Equals(""))
+                tmpWhere = string.Format("where workgroup='{0}' and delmark = 0", _cond.Workgroup);
+            else
+            {
+                strSQL = tmpSQL;
+                return strSQL;
+            }
+
+            if (!_cond.Stage.Equals(""))
+            {
+                tmpWhere = string.Format("{0} and stage='{1}'", tmpWhere, _cond.Stage);
+            }
+            else
+                tmpWhere = tmpWhere;
+
+            if (!_cond.Midway.Equals(""))
+            {
+                tmpWhere = string.Format("{0} and midway_point='{1}'", tmpWhere, _cond.Midway);
+            }
+            else
+                tmpWhere = tmpWhere;
+
+            if (!_cond.CurrentLocate.Equals(""))
+            {
+                tmpWhere = string.Format("{0} and current_locate='{1}'", tmpWhere, _cond.CurrentLocate);
+            }
+            else
+                tmpWhere = tmpWhere;
+
+            strSQL = string.Format(@"{0} {1}", tmpSQL, tmpWhere);
+
+            return strSQL;
+        }
+        public string InsertMidways(InsertMidways _cond)
+        {
+            string strSQL = "";
+            string tmpSQL = "";
+
+            tmpSQL = @"insert into rtd_midways (workgroup, stage, midway_point, current_locate, create_dt, enabled, idx)
+values ('{0}','{1}','{2}','{3}',sysdate, 0, '{4}')";
+
+            strSQL = string.Format(tmpSQL, _cond.Workgroup, _cond.Stage, _cond.Midway, _cond.CurrentLocate, _cond.Idx);
+
+            return strSQL;
+        }
+        public string TurnOnMidways(string _idx, bool turnOn)
+        {
+            string strSQL = "";
+            string tmpSQL = "";
+            string strSet = "";
+            string strWhere = "";
+
+            if(!_idx.Equals(""))
+            {
+                strWhere = string.Format("where idx = '{0}'", _idx);
+
+                strSet = string.Format("set {0}, modify_dt=sysdate", turnOn.Equals(true) ? "enabled=1" : "enabled=0");
+
+                tmpSQL = @"update rtd_midways {0} {1}";
+
+                strSQL = string.Format(tmpSQL, strSet, strWhere);
+            }
+
+            return strSQL;
+        }
+        public string ResetMidways(string _idx, bool _del)
+        {
+            string strSQL = "";
+            string tmpSQL = "";
+            string strSet = "";
+            string strWhere = "";
+
+            if (!_idx.Equals(""))
+            {
+                strWhere = string.Format("where idx = '{0}'", _idx);
+
+                strSet = string.Format("set {0}, enabled=0, modify_dt=sysdate", _del.Equals(true) ? "delmark=1" : "delmark=0");
+
+                tmpSQL = @"update rtd_midways {0} {1}";
+
+                strSQL = string.Format(tmpSQL, strSet, strWhere);
+            }
+
+            return strSQL;
+        }
+        public string QueryStageControlAllList(StageControlList _cond)
+        {
+            string strSQL = "";
+            string tmpSQL = "select * from eqp_port_detail";
+            string tmpWhere = "";
+
+            if (!_cond.EQUIPID.Equals(""))
+                tmpWhere = string.Format("where EQUIPID='{0}'", _cond.EQUIPID);
+            else
+            {
+                strSQL = tmpSQL;
+                return strSQL;
+            }
+
+            if (!_cond.PORTID.Equals(""))
+            {
+                tmpWhere = string.Format("{0} and PORTID='{1}'", tmpWhere, _cond.PORTID);
+            }
+
+            if (!_cond.STAGE.Equals(""))
+            {
+                tmpWhere = string.Format("{0} and STAGE='{1}'", tmpWhere, _cond.STAGE);
+            }
+
+            strSQL = string.Format(@"{0} {1}", tmpSQL, tmpWhere);
+
+            return strSQL;
+        }
+        public string QueryStageControlList(StageControlList _cond)
+        {
+            string strSQL = "";
+            string tmpSQL = "select * from eqp_port_detail";
+            string tmpWhere = "";
+
+            if (!_cond.EQUIPID.Equals(""))
+                tmpWhere = string.Format("where EQUIPID='{0}' and delmark = 0", _cond.EQUIPID);
+            else
+            {
+                strSQL = tmpSQL;
+                return strSQL;
+            }
+
+            if (!_cond.PORTID.Equals(""))
+            {
+                tmpWhere = string.Format("{0} and PORTID='{1}'", tmpWhere, _cond.PORTID);
+            }
+
+            if (!_cond.STAGE.Equals(""))
+            {
+                tmpWhere = string.Format("{0} and STAGE='{1}'", tmpWhere, _cond.STAGE);
+            }
+
+            strSQL = string.Format(@"{0} {1}", tmpSQL, tmpWhere);
+
+            return strSQL;
+        }
+        public string InsertStageControl(StageControlList _cond)
+        {
+            string strSQL = "";
+            string tmpSQL = "";
+
+            tmpSQL = @"insert into eqp_port_detail (equipid, portid, stage, create_dt, enabled)
+values ('{0}','{1}','{2}',sysdate, 0)";
+
+            strSQL = string.Format(tmpSQL, _cond.EQUIPID, _cond.PORTID, _cond.STAGE);
+
+            return strSQL;
+        }
+        public string TurnOnStageControl(TurnOnStageControl _cond, bool turnOn)
+        {
+            string strSQL = "";
+            string tmpSQL = "";
+            string strSet = "";
+            string tmpWhere = "";
+            string strWhere = "";
+
+            if (!_cond.EQUIPID.Equals(""))
+            {
+                tmpWhere = string.Format("where equipid = '{0}'", _cond.EQUIPID);
+
+                if (!_cond.PORTID.Equals(""))
+                {
+                    if (!tmpWhere.Equals(""))
+                    {
+                        tmpWhere = string.Format("{0} and portid = '{1}'", tmpWhere, _cond.PORTID);
+                    }
+                    else
+                        tmpWhere = "";
+                }
+                else
+                    tmpWhere = "";
+
+                if (!_cond.STAGE.Equals(""))
+                {
+                    if (!tmpWhere.Equals(""))
+                    {
+                        tmpWhere = string.Format("{0} and stage = '{1}'", tmpWhere, _cond.STAGE);
+                    }
+                }
+            }
+
+            if (!tmpWhere.Equals(""))
+            {
+                strSet = string.Format("set {0}, modify_dt=sysdate", turnOn.Equals(true) ? "enabled=1" : "enabled=0");
+
+                tmpSQL = @"update eqp_port_detail {0} {1}";
+
+                strSQL = string.Format(tmpSQL, strSet, tmpWhere);
+            }
+
+            return strSQL;
+        }
+        public string ResetStageControl(StageControlList _cond, bool _del)
+        {
+            string strSQL = "";
+            string tmpSQL = "";
+            string strSet = "";
+            string strWhere = "";
+
+            if (!_cond.Equals(""))
+            {
+                strWhere = string.Format("where idx = '{0}'", _cond);
+
+                strSet = string.Format("set {0}, enabled=0, modify_dt=sysdate", _del.Equals(true) ? "delmark=1" : "delmark=0");
+
+                tmpSQL = @"update eqp_port_detail {0} {1}";
+
+                strSQL = string.Format(tmpSQL, strSet, strWhere);
+            }
+
+            return strSQL;
+        }
+        public string DeleteStageControl(StageControlList _cond, bool _remove)
+        {
+            string strSQL = "";
+            string tmpSQL = "";
+            string strSet = "";
+            string tmpWhere = "";
+            string strWhere = "";
+
+            if (!_cond.EQUIPID.Equals(""))
+            {
+                tmpWhere = string.Format("where equipid = '{0}'", _cond.EQUIPID);
+
+                if (!_cond.PORTID.Equals(""))
+                {
+                    if (!tmpWhere.Equals(""))
+                    {
+                        tmpWhere = string.Format("{0} and portid = '{1}'", tmpWhere, _cond.PORTID);
+                    }
+                    else
+                        tmpWhere = "";
+                }
+                else
+                    tmpWhere = "";
+
+                if (!_cond.STAGE.Equals(""))
+                {
+                    if (!tmpWhere.Equals(""))
+                    {
+                        tmpWhere = string.Format("{0} and stage = '{1}'", tmpWhere, _cond.STAGE);
+                    }
+                }
+            }
+
+            if (!tmpWhere.Equals(""))
+            {
+                tmpSQL = @"update eqp_port_detail set enabled=0, modify_dt=sysdate, lastmodify_dt=sysdate{0} {1}";
+
+                strSQL = string.Format(tmpSQL, _remove.Equals(true) ? ",delmark=1" : ",delmark=0", tmpWhere);
+            }
+
+            return strSQL;
+        }
+        public string CarrierTransferDTUpdate(string _carrierid, string _updateType)
+        {
+            string strSQL = "";
+            string tmpSQL = "";
+            string strSet = "";
+            string tmpWhere = "";
+            string strWhere = "";
+
+            if(!_carrierid.Equals(""))
+            {
+                tmpWhere = string.Format("where carrier_id = '{0}'", _carrierid);
+            }
+
+            if (_updateType.ToLower().Equals("infoupdate"))
+            {
+                strSet = string.Format("set info_update_dt = sysdate");
+            }
+            else if (_updateType.ToLower().Equals("locateupdate"))
+            {
+                strSet = string.Format("set loc_update_dt = sysdate");
+            }
+
+            if (!tmpWhere.Equals(""))
+            {
+                tmpSQL = @"update carrier_transfer {0} {1}";
+
+                strSQL = string.Format(tmpSQL, strSet, tmpWhere);
+            }
+
+            return strSQL;
+        }
+        public string QueryAllLotOnERack()
+        {
+            string strSQL = "";
+
+            strSQL = @"select a.carrier_id, c.lotid, c.enddate, a.carrier_state, a.locate, a.portno, a.location_type, a.quantity from carrier_transfer a
+left join carrier_lot_associate b on b.carrier_id=a.carrier_id
+left join lot_info c on c.lotid=b.lot_id
+where a.carrier_state='ONLINE' and lotid is not null";
+
+            return strSQL;
+        }
+        public string GetNewEotdByLot(string _lotid)
+        {
+            string strSQL = "";
+
+            strSQL = string.Format("select eotd('{0}') as eotd from dual", _lotid);
 
             return strSQL;
         }

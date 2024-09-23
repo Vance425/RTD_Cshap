@@ -10,6 +10,7 @@ namespace RTDWebAPI.Commons.Method.Encoder
 {
     public class Encoder
     {
+        #region MD5 加密
         public static string ToMD5(string strs)
         {
             MD5 md5 = new MD5CryptoServiceProvider();
@@ -88,7 +89,9 @@ namespace RTDWebAPI.Commons.Method.Encoder
             strResult = strResult.Replace("-", "");
             return strResult.ToUpper();
         }
+        #endregion
 
+        #region DES加密
         /// <summary>
         /// DES加密
         /// </summary>
@@ -142,7 +145,9 @@ namespace RTDWebAPI.Commons.Method.Encoder
             StreamReader sr = new StreamReader(cst);
             return sr.ReadToEnd();
         }
+        #endregion
 
+        #region DSA 加密
         /// <summary> 
         /// RSA加密資料 
         /// </summary> 
@@ -178,7 +183,7 @@ namespace RTDWebAPI.Commons.Method.Encoder
                 return Encoding.Default.GetString(decryptdata);
             }
         }
-
+        #endregion
 
         #region Base64加密解密
         /// <summary>
@@ -224,7 +229,8 @@ namespace RTDWebAPI.Commons.Method.Encoder
         }
         #endregion
 
-        //SHA為不可逆加密方式
+        #region SHA 加密
+        // SHA為不可逆加密方式
         public static string SHA1Encrypt(string Txt)
         {
             var bytes = Encoding.Default.GetBytes(Txt);
@@ -253,7 +259,9 @@ namespace RTDWebAPI.Commons.Method.Encoder
             var encryptbytes = SHA512.ComputeHash(bytes);
             return Convert.ToBase64String(encryptbytes);
         }
+        #endregion
 
+        #region AES 加密
         /// <summary>
         ///  AES 加密
         /// </summary>
@@ -300,5 +308,6 @@ namespace RTDWebAPI.Commons.Method.Encoder
 
             return Encoding.UTF8.GetString(resultArray);
         }
+        #endregion
     }
 }

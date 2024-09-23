@@ -311,5 +311,24 @@ namespace RTDWebAPI.Interface
         string CheckRcpConstraint(string _table, string _equip, string _lotid);
         string WriteNewLocationForCarrier(CarrierLocationUpdate _carrierLocation, string _lotid);
         string SetWorkgroupSetByWorkgroupStage(string _Workgroup, string _Stage, string _params, bool _Sw);
+        string QueryCommandsTypeByCarrierID(string _carrierID);
+        string QueryMaxPriorityByCmdID(string _commandID);
+        string QueryStageControl();
+        string CloneWorkgroupsForWorkgroupSetByWorkgroup(string _newWorkgroup, string _Workgroup);
+        string CloneStageForWorkgroupSetByWorkgroupStage(string _newStage, string _workgroup, string _stage);
+        string SetParameterWorkgroupSetByWorkgroupStage(string _Workgroup, string _Stage, string _paramsName, object _paramsValue);
+        string QueryMidways(QueryMidways _cond);
+        string InsertMidways(InsertMidways _cond);
+        string TurnOnMidways(string _idx, bool turnOn);
+        string ResetMidways(string _idx, bool _del);
+        string QueryStageControlAllList(StageControlList _cond);
+        string QueryStageControlList(StageControlList _cond);
+        string InsertStageControl(StageControlList _cond);
+        string TurnOnStageControl(TurnOnStageControl _cond, bool turnOn);
+        string ResetStageControl(StageControlList _cond, bool _del);
+        string DeleteStageControl(StageControlList _cond, bool _remove);
+        string CarrierTransferDTUpdate(string _carrierid, string _updateType);
+        string QueryAllLotOnERack();
+        string GetNewEotdByLot(string _lotid);
     }
 }

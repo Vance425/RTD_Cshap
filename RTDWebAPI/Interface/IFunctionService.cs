@@ -79,5 +79,6 @@ namespace RTDWebAPI.Interface
         bool TriggerAlarms(DBTool _dbTool, IConfiguration configuration, ILogger _logger);
         string GetJArrayValue(JObject _JArray, string key);
         string TryConvertDatetime(string _datetime);
+        bool SyncEotdData(DBTool _dbTool, IConfiguration configuration, ILogger _logger);
     }
 }

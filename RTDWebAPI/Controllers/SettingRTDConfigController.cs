@@ -1921,7 +1921,7 @@ namespace RTDWebAPI.Controllers
             string tmpKey = "";
             string _stage = "";
             string _userID = "";
-            string resultMsg = "";
+            string _tmpValues = "";
             string _paramsName = "";
 
             IBaseDataService _BaseDataService = new BaseDataService();
@@ -1936,8 +1936,6 @@ namespace RTDWebAPI.Controllers
 
                 if (dt.Rows.Count > 0)
                 {
-                    Boolean enableFunction = false;
-
                     if (!value.Workgroup.Equals(""))
                         tmpKey = string.Format("workgroup='{0}'", value.Workgroup);
 
@@ -1949,73 +1947,60 @@ namespace RTDWebAPI.Controllers
 
                     if (!tmpKey.Equals(""))
                     {
-                        sql = _BaseDataService.SetWorkgroupSetByWorkgroupStage(value.Workgroup, value.Stage, value.Parameter, true);
-                        dtTemp = _dbTool.GetDataTable(sql);
-
-                        if (dr.Length > 0)
-                        {
-                            tmp2Msg = "{" + string.Format(@"'{0}':'{1}', 'UserID':'{2}'", value.Stage, dr[0][_paramsName].ToString(), _userID) + "}";
-                            //iPreTransMode = dt.Rows[0]["PRETRANSFER"].ToString().Equals("1") ? true : false;
-                            enableFunction = dr[0][_paramsName].ToString().Equals("1") ? true : false;
-                            _stage = value.Stage;
-                        }
+                        if(value.Stage.Equals(""))
+                            dr = dt.Select(string.Format("stage='{1}'", _paramsName, "DEFAULT"));
                         else
-                        {
-                            tmpMsg = string.Format("Stage {0} not exist.", value.Stage);
-                        }
-                    }
-                    else
-                    {
-                        string tmpStage = "";
-                        string lstStage = "";
+                            dr = dt.Select(string.Format("stage='{1}'", _paramsName, value.Stage));
 
-                        foreach (DataRow drTemp in dt.Rows)
+                        if(dr.Length > 0)
                         {
-                            tmpStage = string.Format(@"'{0}':'{1}'", drTemp["stage"].ToString(), drTemp[_paramsName].ToString());
+                            if (!dr[0][_paramsName].ToString().Equals(value.SwState.Equals(true) ? "1" : "0"))
+                            {
+                                sql = _BaseDataService.SetWorkgroupSetByWorkgroupStage(value.Workgroup, value.Stage, value.Parameter, value.SwState);
+                                _dbTool.SQLExec(sql, out tmpMsg, true);
 
-                            if (lstStage.Equals(""))
-                                lstStage = tmpStage;
+                                if (tmpMsg.Equals(""))
+                                {
+                                    tmp2Msg = string.Format(@"The function [{0}] been {1}. Workgroup: [{2}], Stage: [{3}], UserID: [{4}]", _paramsName, value.SwState.Equals(true) ? "turn on" : "turn off", value.Workgroup, value.Stage, _userID);
+
+                                }
+                                else
+                                {
+                                    tmp2Msg = string.Format("Function change fail. Workgroup: [{0}], Stage: [{1}], State: {2} [{3}]", value.Workgroup, value.Stage, value.SwState, tmp2Msg);
+                                }
+                            }
                             else
-                                lstStage = string.Format("{0}, {1}", lstStage, tmpStage);
+                            {
+                                tmp2Msg = string.Format("No need change state. Workgroup: [{0}], Stage: [{1}], State: {2} [{3}]", value.Workgroup, value.Stage, value.SwState, value.UserID);
+                            }
                         }
-
-                        tmp2Msg = "{" + string.Format(@"{0}, 'UserID':'{1}'", lstStage, _userID) + "}";
-
-                        enableFunction = dt.Rows[0][_paramsName].ToString().Equals("1") ? true : false;
-                        _stage = "";
                     }
                 }
                 else
                 {
-                    tmpMsg = string.Format("Workgroup {0} not exist.", value.Workgroup);
+                    tmp2Msg = string.Format("Workgroup {0} not exist.", value.Workgroup);
                 }
 
                 if (tmpMsg.Equals(""))
                 {
-                    if (resultMsg.Equals(""))
-                        tmp2Msg = string.Format("Set use fail eRack success. [{0}][{1}] by [{2}]", value.Workgroup, _stage, _userID);
-                    else
-                        tmp2Msg = string.Format("Set use fail eRack success. {0} [{1}][{2}] by [{3}]", resultMsg, value.Workgroup, _stage, _userID);
-
                     _logger.Info(tmp2Msg);
 
                     foo = new APIResult()
                     {
                         Success = true,
                         State = "OK",
-                        Message = tmpMsg
+                        Message = tmp2Msg
                     };
                 }
                 else
                 {
-                    tmp2Msg = string.Format("Set use fail eRack failed. [{0}][{1}] by [{2}]", value.Workgroup, _stage, _userID);
                     _logger.Info(tmp2Msg);
 
                     foo = new APIResult()
                     {
                         Success = false,
                         State = "NG",
-                        Message = tmpMsg
+                        Message = tmp2Msg
                     };
                 }
             }
@@ -2046,6 +2031,1263 @@ namespace RTDWebAPI.Controllers
             public string Parameter { get; set; }
             public bool SwState { get; set; }
             public string UserID { get; set; }
+        }
+
+        [HttpGet("QueryStageControl")]
+        public ActionResult<String> QueryStageControl()
+        {
+
+            string funcName = "QueryStageControl";
+            string tmpMsg = "";
+            string strResult = "";
+            DataTable dt = null;
+            DataRow[] dr = null;
+            string sql = "";
+            IBaseDataService _BaseDataService = new BaseDataService();
+
+            try
+            {
+                //// 查詢資料
+                dt = _dbTool.GetDataTable(_BaseDataService.QueryStageControl());
+
+                if (dt.Rows.Count > 0)
+                {
+                    strResult = JsonConvert.SerializeObject(dt);
+                }
+            }
+            catch (Exception ex)
+            {
+                return strResult;
+            }
+            finally
+            {
+                if (dt is not null)
+                {
+                    dt.Clear(); dt.Dispose(); dt = null; dr = null;
+                }
+            }
+
+            return strResult;
+        }
+        [HttpPost("CloneWorkgroupWorkgroupSetByWorkgroup")]
+        public APIResult CloneWorkgroupWorkgroupSetByWorkgroup([FromBody] ClassParamsWorkgroupSet value)
+        {
+            APIResult foo;
+            string funcName = "CloneWorkgroupWorkgroupSetByWorkgroup";
+            string tmpMsg = "";
+            string tmp2Msg = "";
+            DataTable dt = null;
+            DataTable dtTemp = null;
+            DataRow[] dr = null;
+            string sql = "";
+            string tmpKey = "";
+            string _stage = "";
+            string _userID = "";
+            string _tmpNewValue = "";
+            string _paramsName = "";
+            bool _processingState = false;
+
+            IBaseDataService _BaseDataService = new BaseDataService();
+
+            try
+            {
+
+                _userID = value.UserID.Equals("") ? "-----" : value.UserID;
+
+                dt = _dbTool.GetDataTable(_BaseDataService.QueryWorkgroupSet(value.Workgroup));
+
+                if (dt.Rows.Count > 0)
+                {
+
+                    if (!value.newWorkgroup.Equals(""))
+                        _tmpNewValue = string.Format("{0}", value.newWorkgroup.Trim());
+                    else
+                        tmpMsg = string.Format("New workgroup cannot empty! please check.");
+
+                    if (tmpMsg.Equals(""))
+                    {
+                        sql = _BaseDataService.CloneWorkgroupsForWorkgroupSetByWorkgroup(value.newWorkgroup, value.Workgroup);
+                        _dbTool.SQLExec(sql, out tmpMsg, true);
+
+                        if (tmpMsg.Equals(""))
+                        {
+                            tmpMsg = string.Format(@"Clone workgroup [{0}] Success. userID [{1}]", value.newWorkgroup, _userID);
+                            _processingState = true;
+                        }
+                        else
+                        {
+                            tmpMsg = string.Format(@"Clone workgroup [{0}] Fail. userID [{1}]", value.newWorkgroup, _userID);
+                            _processingState = false;
+                        }
+                    }
+                }
+                else
+                {
+                    tmpMsg = string.Format("Workgroup {0} not exist.", value.Workgroup);
+                }
+
+                if (_processingState)
+                {
+                    _logger.Info(tmpMsg);
+
+                    foo = new APIResult()
+                    {
+                        Success = true,
+                        State = "OK",
+                        Message = tmpMsg
+                    };
+                }
+                else
+                {
+                    _logger.Info(tmpMsg);
+
+                    foo = new APIResult()
+                    {
+                        Success = false,
+                        State = "NG",
+                        Message = tmpMsg
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                foo = new APIResult()
+                {
+                    Success = true,
+                    State = "NG",
+                    Message = ex.Message
+                };
+            }
+            finally
+            {
+                //_logger.LogInformation(string.Format("Info :{0}", value.CarrierID));
+                if (dt is not null)
+                {
+                    dt.Clear(); dt.Dispose(); dt = null; dr = null;
+                }
+            }
+
+            return foo;
+        }
+        [HttpPost("CloneStageForWorkgroupSetByWorkgroupStage")]
+        public APIResult CloneStageForWorkgroupSetByWorkgroupStage([FromBody] ClassParamsWorkgroupSet value)
+        {
+            APIResult foo;
+            string funcName = "CloneStageForWorkgroupSetByWorkgroupStage";
+            string tmpMsg = "";
+            string tmp2Msg = "";
+            DataTable dt = null;
+            DataTable dtTemp = null;
+            DataRow[] dr = null;
+            string sql = "";
+            string tmpKey = "";
+            string _stage = "";
+            string _userID = "";
+            string _tmpNewValue = "";
+            string _paramsName = "";
+            bool _procesingState = false;
+
+            IBaseDataService _BaseDataService = new BaseDataService();
+
+            try
+            {
+
+                _userID = value.UserID.Equals("") ? "-----" : value.UserID;
+
+                dt = _dbTool.GetDataTable(_BaseDataService.QueryWorkgroupSet(value.Workgroup));
+
+                if (dt.Rows.Count > 0)
+                {
+                    dtTemp = _dbTool.GetDataTable(_BaseDataService.QueryWorkgroupSet(value.Workgroup, value.Stage));
+
+                    if (dtTemp.Rows.Count > 0)
+                    {
+                        if (tmpMsg.Equals(""))
+                        {
+                            sql = _BaseDataService.CloneStageForWorkgroupSetByWorkgroupStage(value.newStage, value.Workgroup, value.Stage);
+                            _dbTool.SQLExec(sql, out tmpMsg, true);
+
+                            if (tmpMsg.Equals(""))
+                            {
+                                tmpMsg = string.Format(@"Clone workgroup [{0}] Success. userID [{1}]", value.newWorkgroup, _userID);
+                                _procesingState = true;
+                            }
+                            else
+                            {
+                                tmpMsg = string.Format(@"Clone workgroup [{0}] Fail. userID [{1}]", value.newWorkgroup, _userID);
+                                _procesingState = false;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    tmpMsg = string.Format("Workgroup {0} not exist.", value.Workgroup);
+                }
+
+                if (_procesingState)
+                {
+                    _logger.Info(tmpMsg);
+
+                    foo = new APIResult()
+                    {
+                        Success = true,
+                        State = "OK",
+                        Message = tmpMsg
+                    };
+                }
+                else
+                {
+                    _logger.Info(tmpMsg);
+
+                    foo = new APIResult()
+                    {
+                        Success = false,
+                        State = "NG",
+                        Message = tmpMsg
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                foo = new APIResult()
+                {
+                    Success = true,
+                    State = "NG",
+                    Message = ex.Message
+                };
+            }
+            finally
+            {
+                //_logger.LogInformation(string.Format("Info :{0}", value.CarrierID));
+                if (dt is not null)
+                {
+                    dt.Clear(); dt.Dispose(); dt = null; dr = null;
+                }
+            }
+
+            return foo;
+        }
+        public class ClassParamsWorkgroupSet
+        {
+            public string Workgroup { get; set; }
+            public string Stage { get; set; }
+            public string newWorkgroup { get; set; }
+            public string newStage { get; set; }
+            public string UserID { get; set; }
+        }
+        [HttpPost("SetParametersWorkgroupSetByWorkgroupStage")]
+        public APIResult SetParametersWorkgroupSetByWorkgroupStage([FromBody] ClassEntityWorkgroupSetting value)
+        {
+            APIResult foo;
+            string funcName = "SetParametersWorkgroupSetByWorkgroupStage";
+            string tmpMsg = "";
+            string tmp2Msg = "";
+            DataTable dt = null;
+            DataTable dtTemp = null;
+            DataRow[] dr = null;
+            string sql = "";
+            string tmpKey = "";
+            string _stage = "";
+            string _userID = "";
+            string _tmpValues = "";
+            string _paramsName = "";
+            bool _isSwitch = false;
+            bool _doLogic = false;
+
+            IBaseDataService _BaseDataService = new BaseDataService();
+
+            try
+            {
+                _paramsName = "SetParametersWorkgroupSetByWorkgroupStage";
+
+                _userID = value.UserID.Equals("") ? "-----" : value.UserID;
+
+                dt = _dbTool.GetDataTable(_BaseDataService.QueryWorkgroupSet(value.Workgroup));
+
+                if (dt.Rows.Count > 0)
+                {
+                    if (!value.Workgroup.Equals(""))
+                        tmpKey = string.Format("workgroup='{0}'", value.Workgroup);
+
+                    if (!value.Stage.Equals(""))
+                        tmpKey = string.Format("{0} and stage='{1}'", tmpKey, value.Stage);
+
+                    if (!value.Parameter.Equals(""))
+                        _paramsName = string.Format("{0}", value.Parameter.Trim());
+
+                    if (!tmpKey.Equals(""))
+                    {
+                        ///有Stage
+                        if (value.Stage.Equals(""))
+                            dr = dt.Select(string.Format("stage='{1}'", _paramsName, "DEFAULT"));
+                        else
+                            dr = dt.Select(string.Format("stage='{1}'", _paramsName, value.Stage));
+
+                        if (dr.Length > 0)
+                        {
+                            if (!value.Parameter.Equals(""))
+                            {
+                                _isSwitch = false;
+                                _doLogic = true;
+                            }
+                            else
+                            {
+                                _doLogic = false;
+                                tmpMsg = string.Format(@"Parameter invalid. please check parameter.");
+                            }
+
+                            if(_doLogic)
+                            {
+
+                                if (!value.Parameter.Equals(""))
+                                {
+                                    bool _multi = false;
+                                    string[] _lstParams;
+
+                                    if (value.Values.IndexOf(',') > 0)
+                                    { _multi = true; }
+
+                                    if (_multi)
+                                    {
+                                        _lstParams = value.Values.Split(',');
+                                    }
+                                    else
+                                    {
+                                        _lstParams = new string[] { value.Values };
+                                    }
+
+                                    foreach (string tmpParam in _lstParams)
+                                    {
+
+                                        if (!dr[0][_paramsName].ToString().Equals(""))
+                                        {
+                                            sql = _BaseDataService.SetParameterWorkgroupSetByWorkgroupStage(value.Workgroup, value.Stage, value.Parameter, value.IsNumber.Equals(true) ? int.Parse(tmpParam) : tmpParam);
+                                            _dbTool.SQLExec(sql, out tmpMsg, true);
+
+                                            if (tmpMsg.Equals(""))
+                                            {
+                                                tmp2Msg = string.Format(@"The Key [{0}] been change to {1}. Workgroup: [{2}], Stage: [{3}], UserID: [{4}]", _paramsName, tmpParam, value.Workgroup, value.Stage, _userID);
+
+                                            }
+                                            else
+                                            {
+                                                tmp2Msg = string.Format("Parameter change fail. Workgroup: [{0}], Stage: [{1}], State: {2} [{3}]", value.Workgroup, value.Stage, value.IsNumber, tmp2Msg);
+                                            }
+                                        }
+                                        else
+                                        {
+                                            tmp2Msg = string.Format("No need change state. Workgroup: [{0}], Stage: [{1}], State: {2} [{3}]", value.Workgroup, value.Stage, value.IsNumber, value.UserID);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else
+                    {
+                        ///無Stage, 直接用workgroup update
+                        if (value.Stage.Equals(""))
+                            dr = dt.Select(string.Format("stage='{1}'", _paramsName, "DEFAULT"));
+                        else
+                            dr = dt.Select(string.Format("stage='{1}'", _paramsName, value.Stage));
+
+                        if (dr.Length > 0)
+                        {
+                            if (!dr[0][_paramsName].ToString().Equals(value.IsNumber.Equals(true) ? "1" : "0"))
+                            {
+                                sql = _BaseDataService.SetWorkgroupSetByWorkgroupStage(value.Workgroup, value.Stage, value.Parameter, value.IsNumber);
+                                _dbTool.SQLExec(sql, out tmpMsg, true);
+
+                                if (tmpMsg.Equals(""))
+                                {
+                                    tmp2Msg = string.Format(@"The function [{0}] been {1}. Workgroup: [{2}], Stage: [{3}], UserID: [{4}]", _paramsName, value.IsNumber.Equals(true) ? "turn on" : "turn off", value.Workgroup, value.Stage, _userID);
+
+                                }
+                                else
+                                {
+                                    tmp2Msg = string.Format("Function change fail. Workgroup: [{0}], Stage: [{1}], State: {2} [{3}]", value.Workgroup, value.Stage, value.IsNumber, tmp2Msg);
+                                }
+                            }
+                            else
+                            {
+                                tmp2Msg = string.Format("No need change state. Workgroup: [{0}], Stage: [{1}], State: {2} [{3}]", value.Workgroup, value.Stage, value.IsNumber, value.UserID);
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    tmp2Msg = string.Format("Workgroup {0} not exist.", value.Workgroup);
+                }
+
+                if (tmpMsg.Equals(""))
+                {
+                    _logger.Info(tmp2Msg);
+
+                    foo = new APIResult()
+                    {
+                        Success = true,
+                        State = "OK",
+                        Message = tmp2Msg
+                    };
+                }
+                else
+                {
+                    _logger.Info(tmp2Msg);
+
+                    foo = new APIResult()
+                    {
+                        Success = false,
+                        State = "NG",
+                        Message = tmp2Msg
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                foo = new APIResult()
+                {
+                    Success = true,
+                    State = "NG",
+                    Message = ex.Message
+                };
+            }
+            finally
+            {
+                //_logger.LogInformation(string.Format("Info :{0}", value.CarrierID));
+                if (dt is not null)
+                {
+                    dt.Clear(); dt.Dispose(); dt = null; dr = null;
+                }
+            }
+
+            return foo;
+        }
+        public class ClassEntityWorkgroupSetting
+        {
+            public string Workgroup { get; set; }
+            public string Stage { get; set; }
+            public string Parameter { get; set; }
+            public bool IsNumber { get; set; }
+            public string Values { get; set; }
+            public string UserID { get; set; }
+        }
+
+        [HttpPost("QueryMidways")]
+        public ActionResult<String> QueryMidways([FromBody] QueryMidways value)
+        {
+
+            string funcName = "QueryMidways";
+            string tmpMsg = "";
+            string strResult = "";
+            DataTable dt = null;
+            DataRow[] dr = null;
+            string sql = "";
+            IBaseDataService _BaseDataService = new BaseDataService();
+
+            try
+            {
+                //// 查詢資料
+                sql = _BaseDataService.QueryMidways(value);
+                dt = _dbTool.GetDataTable(sql);
+
+                if (dt.Rows.Count > 0)
+                {
+                    strResult = JsonConvert.SerializeObject(dt);
+                }
+            }
+            catch (Exception ex)
+            {
+                return strResult;
+            }
+            finally
+            {
+                if (dt is not null)
+                {
+                    dt.Clear(); dt.Dispose(); dt = null; dr = null;
+                }
+            }
+
+            return strResult;
+        }
+        public class ClassConditionMidways
+        {
+            public string Workgroup { get; set; }
+            public string Stage { get; set; }
+            public string Midway { get; set; }
+            public string UserID { get; set; }
+        }
+        [HttpPost("InsertMidways")]
+        public APIResult InsertMidways([FromBody] InsertMidways value)
+        {
+            APIResult foo;
+            string funcName = "InsertMidways";
+            string tmpMsg = "";
+            string strResult = "";
+            DataTable dt = null;
+            DataRow[] dr = null;
+            string sql = "";
+            InsertMidways _insertMidways;
+            string[] _lstCurrentLocate;
+            string _failedCurrentLocate = "";
+            string _failedCauses = "";
+            int _idx = 1;
+            string _currentdatetime = "";
+            IBaseDataService _BaseDataService = new BaseDataService();
+
+            try
+            {
+                if(value.CurrentLocate.IndexOf(',') > 0)
+                {
+                    _lstCurrentLocate = value.CurrentLocate.Split(',');
+                }
+                else
+                {
+                    _lstCurrentLocate = new string[] { value.CurrentLocate.ToString() };
+                }
+
+                _currentdatetime = DateTime.Now.ToString("yyyyMMddHHmmss");
+
+                foreach (string tmpKey in _lstCurrentLocate)
+                {
+                    tmpMsg = "";
+                    _insertMidways = new InsertMidways();
+
+                    _insertMidways.Workgroup = value.Workgroup;
+                    _insertMidways.Stage = value.Stage;
+                    _insertMidways.Midway = value.Midway;
+                    _insertMidways.CurrentLocate = tmpKey;
+                    _insertMidways.Idx = string.Format("{0}{1}", _currentdatetime, _idx.ToString().PadLeft(5, '0'));
+
+                    try {
+                        //// 查詢資料
+                        _dbTool.SQLExec(_BaseDataService.InsertMidways(_insertMidways), out tmpMsg, true);
+
+                        if(tmpMsg.Equals(""))
+                        {
+                            //_failedCauses = string.Format("[{0}, {1}]", _insertMidways.CurrentLocate, tmpMsg);
+                        }
+                        else
+                        {
+                            _failedCauses = string.Format("{0}[{1},{2}]", _failedCauses, _insertMidways.CurrentLocate, tmpMsg);
+                        }
+                    }
+                    catch(Exception ex) { 
+                        if(_failedCurrentLocate.Equals(""))
+                        {
+                            _failedCurrentLocate = string.Format("[{0},{1}]", tmpKey, ex.Message);
+                        }
+                        else
+                        {
+                            _failedCurrentLocate = string.Format("{0}[{1},{2}]", _failedCurrentLocate, tmpKey, ex.Message);
+                        }
+                    }
+
+                    _idx++;
+                }
+
+                //
+                if (_failedCurrentLocate.Equals(""))
+                {
+                    foo = new APIResult()
+                    {
+                        Success = true,
+                        State = "OK",
+                        Message = tmpMsg
+                    };
+                }
+                else
+                {
+                    foo = new APIResult()
+                    {
+                        Success = true,
+                        State = "NG",
+                        Message = tmpMsg
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                foo = new APIResult()
+                {
+                    Success = true,
+                    State = "NG",
+                    Message = ex.Message
+                };
+            }
+            finally
+            {
+                if (dt is not null)
+                {
+                    dt.Clear(); dt.Dispose(); dt = null; dr = null;
+                }
+            }
+
+            return foo;
+        }
+        [HttpPost("TurnOnMidways")]
+        public APIResult TurnOnMidways([FromBody] TurnOnMidways value)
+        {
+            APIResult foo;
+            string funcName = "TurnOnMidways";
+            string tmpMsg = "";
+            string tmpMsg2 = "";
+            string strResult = "";
+            DataTable dt = null;
+            DataRow[] dr = null;
+            string sql = "";
+            TurnOnMidways _turnOnMidways;
+            QueryMidways _queryMidways;
+            string[] _lstCurrentLocate;
+            string _failedCurrentLocate = "";
+            string _failedCauses = "";
+            string _idxString = "";
+            string _theRecordsState = "";
+            bool _break = false;
+            IBaseDataService _BaseDataService = new BaseDataService();
+
+            try
+            {
+                if (value.CurrentLocate.IndexOf(',') > 0)
+                {
+                    _lstCurrentLocate = value.CurrentLocate.Split(',');
+                }
+                else
+                {
+                    _lstCurrentLocate = new string[] { value.CurrentLocate.ToString() };
+                }
+
+                _queryMidways = new QueryMidways();
+                _queryMidways.Workgroup = value.Workgroup;
+                _queryMidways.Stage = value.Stage;
+                _queryMidways.Midway = value.Midway;
+
+                foreach (string tmpKey in _lstCurrentLocate)
+                {
+                    _queryMidways.CurrentLocate = tmpKey;
+
+                    sql = _BaseDataService.QueryMidways(_queryMidways);
+                    dt = _dbTool.GetDataTable(sql);
+
+                    if(dt.Rows.Count > 0)
+                    {
+                        foreach(DataRow drTemp in dt.Rows)
+                        {
+                            _idxString = drTemp["idx"].ToString();
+                            _theRecordsState = drTemp["enabled"].ToString().Equals("1") ? "true" : "false";
+
+                            tmpMsg = "";
+
+                            try
+                            {
+                                if (!_theRecordsState.Equals(value.State))
+                                {
+
+                                    //// 查詢資料
+                                    _dbTool.SQLExec(_BaseDataService.TurnOnMidways(_idxString, value.State.ToLower().Equals("true") ? true : false), out tmpMsg, true);
+
+                                    if (tmpMsg.Equals(""))
+                                    {
+                                        tmpMsg2 = string.Format("The midway [{0}/{1}/{2}/{3}] has been {4}", _queryMidways.Workgroup, _queryMidways.Stage, _queryMidways.Midway, _queryMidways.CurrentLocate, value.State.ToLower().Equals("true") ? "turn on" : "turn off");
+                                        _break = false;
+                                    }
+                                    else
+                                    {
+                                        tmpMsg2 = string.Format("Change state[{0}] fail. Midway [{1}/{2}/{3}/{4}]. Message: {5}", value.State, _queryMidways.Workgroup, _queryMidways.Stage, _queryMidways.Midway, _queryMidways.CurrentLocate, tmpMsg2);
+                                        _break = true;
+                                    }
+
+                                    _logger.Info(tmpMsg2);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                tmpMsg2 = string.Format("Change state[{0}] fail. Midway [{1}/{2}/{3}/{4}]. [Exception]: {5}", value.State, _queryMidways.Workgroup, _queryMidways.Stage, _queryMidways.Midway, _queryMidways.CurrentLocate, tmpMsg2);
+                                _logger.Info(tmpMsg2);
+                                _break = true;
+                            }
+
+                            if (_break.Equals(true))
+                                break;
+                            else
+                                _queryMidways.CurrentLocate = "";
+                        }
+                    }
+
+                    if (_break.Equals(true))
+                        break;
+                    else
+                        _queryMidways.CurrentLocate = "";
+                }
+
+                //
+                if (_break.Equals(false))
+                {
+                    foo = new APIResult()
+                    {
+                        Success = true,
+                        State = "OK",
+                        Message = tmpMsg2
+                    };
+                }
+                else
+                {
+                    foo = new APIResult()
+                    {
+                        Success = true,
+                        State = "NG",
+                        Message = tmpMsg2
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                foo = new APIResult()
+                {
+                    Success = true,
+                    State = "NG",
+                    Message = ex.Message
+                };
+            }
+            finally
+            {
+                if (dt is not null)
+                {
+                    dt.Clear(); dt.Dispose(); dt = null; dr = null;
+                }
+            }
+
+            return foo;
+        }
+
+        [HttpPost("QueryStageControlList")]
+        public ActionResult<String> QueryStageControlList([FromBody] StageControlList value)
+        {
+
+            string funcName = "QueryStageControlList";
+            string tmpMsg = "";
+            string strResult = "";
+            DataTable dt = null;
+            DataRow[] dr = null;
+            string sql = "";
+            IBaseDataService _BaseDataService = new BaseDataService();
+
+            try
+            {
+                //// 查詢資料
+                sql = _BaseDataService.QueryStageControlList(value);
+                dt = _dbTool.GetDataTable(sql);
+
+                if (dt.Rows.Count > 0)
+                {
+                    strResult = JsonConvert.SerializeObject(dt);
+                }
+            }
+            catch (Exception ex)
+            {
+                return strResult;
+            }
+            finally
+            {
+                if (dt is not null)
+                {
+                    dt.Clear(); dt.Dispose(); dt = null; dr = null;
+                }
+            }
+
+            return strResult;
+        }
+        [HttpPost("InsertStageControl")]
+        public APIResult InsertStageControl([FromBody] StageControlList value)
+        {
+            APIResult foo;
+            string funcName = "InsertStageControl";
+            string tmpMsg = "";
+            string tmpMsg2 = "";
+            string strResult = "";
+            DataTable dt = null;
+            DataRow[] dr = null;
+            string sql = "";
+            StageControlList _stageControl;
+            string[] _lstCurrentLocate;
+            string _failedCurrentLocate = "";
+            string _failedCauses = "";
+            int _idx = 1;
+            string _currentdatetime = "";
+            bool _break = false;
+            IBaseDataService _BaseDataService = new BaseDataService();
+
+            try
+            {
+                if (value.STAGE.IndexOf(',') > 0)
+                {
+                    _lstCurrentLocate = value.STAGE.Split(',');
+                }
+                else
+                {
+                    _lstCurrentLocate = new string[] { value.STAGE.ToString() };
+                }
+
+                _currentdatetime = DateTime.Now.ToString("yyyyMMddHHmmss");
+
+                foreach (string tmpKey in _lstCurrentLocate)
+                {
+                    tmpMsg = "";
+                    _stageControl = new StageControlList();
+
+                    _stageControl.EQUIPID = value.EQUIPID;
+                    _stageControl.PORTID = value.PORTID;
+                    _stageControl.STAGE = tmpKey;
+
+                    try
+                    {
+                        sql = _BaseDataService.QueryStageControlAllList(_stageControl);
+                        dt = _dbTool.GetDataTable(sql);
+
+                        if(dt.Rows.Count > 0)
+                        {
+                            //// 查詢資料
+                            _dbTool.SQLExec(_BaseDataService.DeleteStageControl(_stageControl, false), out tmpMsg, true);
+
+                            if (tmpMsg.Equals(""))
+                            {
+                                _failedCauses = string.Format("The Stage Control [{0}/{1}/{2}] has been recovery.", _stageControl.EQUIPID, _stageControl.PORTID, _stageControl.STAGE);
+                                _break = false;
+                            }
+                            else
+                            {
+                                _failedCauses = string.Format("recovery stage control failed. Stage is [{0}/{1}/{2}]. Message: {3}", _stageControl.EQUIPID, _stageControl.PORTID, _stageControl.STAGE, tmpMsg);
+                                _break = true;
+                            }
+                        }
+                        else
+                        {
+                            //// 查詢資料
+                            _dbTool.SQLExec(_BaseDataService.InsertStageControl(_stageControl), out tmpMsg, true);
+
+                            if (tmpMsg.Equals(""))
+                            {
+                                _failedCauses = string.Format("Insert Stage Control. [{0}/{1}/{2}][Success]", _stageControl.EQUIPID, _stageControl.PORTID, _stageControl.STAGE);
+                                _break = false;
+                            }
+                            else
+                            {
+                                _failedCauses = string.Format("Insert Stage Control failed. [{0}/{1}/{2}][Error][{3}]", _stageControl.EQUIPID, _stageControl.PORTID, _stageControl.STAGE, tmpMsg);
+                                _break = true;
+                            }
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _failedCauses = string.Format("recovery stage control failed. [{0}/{1}/{2}][Exception][{3}]", _stageControl.EQUIPID, _stageControl.PORTID, _stageControl.STAGE, ex.Message);
+                        _break = true;
+                    }
+                }
+
+                //
+                if (!_break)
+                {
+                    foo = new APIResult()
+                    {
+                        Success = true,
+                        State = "OK",
+                        Message = _failedCauses
+                    };
+                }
+                else
+                {
+                    foo = new APIResult()
+                    {
+                        Success = true,
+                        State = "NG",
+                        Message = _failedCauses
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                foo = new APIResult()
+                {
+                    Success = true,
+                    State = "NG",
+                    Message = ex.Message
+                };
+            }
+            finally
+            {
+                if (dt is not null)
+                {
+                    dt.Clear(); dt.Dispose(); dt = null; dr = null;
+                }
+            }
+
+            return foo;
+        }
+        [HttpPost("TurnOnStageControl")]
+        public APIResult TurnOnStageControl([FromBody] TurnOnStageControl value)
+        {
+            APIResult foo;
+            string funcName = "TurnOnStageControl";
+            string tmpMsg = "";
+            string tmpMsg2 = "";
+            string strResult = "";
+            DataTable dt = null;
+            DataRow[] dr = null;
+            string sql = "";
+            TurnOnStageControl _turnOnStageControl;
+            StageControlList _stageControl;
+            string[] _lstCurrentLocate;
+            string _failedCurrentLocate = "";
+            string _failedCauses = "";
+            string _idxString = "";
+            string _theRecordsState = "";
+            bool _break = false;
+            IBaseDataService _BaseDataService = new BaseDataService();
+
+            try
+            {
+                if (value.STAGE.IndexOf(',') > 0)
+                {
+                    _lstCurrentLocate = value.STAGE.Split(',');
+                }
+                else
+                {
+                    _lstCurrentLocate = new string[] { value.STAGE.ToString() };
+                }
+
+                _turnOnStageControl = new TurnOnStageControl();
+                _turnOnStageControl.EQUIPID = value.EQUIPID;
+                _turnOnStageControl.PORTID = value.PORTID;
+                _stageControl = new StageControlList();
+                _stageControl.EQUIPID = value.EQUIPID;
+                _stageControl.PORTID = value.PORTID;
+
+                foreach (string tmpKey in _lstCurrentLocate)
+                {
+                    _turnOnStageControl.STAGE = tmpKey;
+                    _stageControl.STAGE = tmpKey;
+
+                    sql = _BaseDataService.QueryStageControlList(_stageControl);
+                    dt = _dbTool.GetDataTable(sql);
+
+                    if (dt.Rows.Count > 0)
+                    {
+                        foreach (DataRow drTemp in dt.Rows)
+                        {
+                            _theRecordsState = drTemp["enabled"].ToString().Equals("1") ? "true" : "false";
+
+                            tmpMsg = "";
+
+                            try
+                            {
+                                if (!_theRecordsState.Equals(value.Enabled))
+                                {
+
+                                    //// 查詢資料
+                                    _dbTool.SQLExec(_BaseDataService.TurnOnStageControl(_turnOnStageControl, value.Enabled.ToLower().Equals("true") ? true : false), out tmpMsg, true);
+
+                                    if (tmpMsg.Equals(""))
+                                    {
+                                        tmpMsg2 = string.Format("The Stage Control [{0}/{1}/{2}] has been {3}", _turnOnStageControl.EQUIPID, _turnOnStageControl.PORTID, _turnOnStageControl.STAGE, value.Enabled.ToLower().Equals("true") ? "turn on" : "turn off");
+                                        _break = false;
+                                    }
+                                    else
+                                    {
+                                        tmpMsg2 = string.Format("Change state[{0}] fail. Midway [{1}/{2}/{3}]. Message: {4}", value.Enabled, _turnOnStageControl.EQUIPID, _turnOnStageControl.PORTID, _turnOnStageControl.STAGE, tmpMsg);
+                                        _break = true;
+                                    }
+
+                                    _logger.Info(tmpMsg2);
+                                }
+                            }
+                            catch (Exception ex)
+                            {
+                                tmpMsg2 = string.Format("Change state[{0}] fail. Stage Control [{1}/{2}/{3}]. [Exception]: {4}", value.Enabled, _turnOnStageControl.EQUIPID, _turnOnStageControl.PORTID, _turnOnStageControl.STAGE, ex.Message);
+                                _logger.Info(tmpMsg2);
+                                _break = true;
+                            }
+
+                            if (_break.Equals(true))
+                                break;
+                            else
+                                _turnOnStageControl.STAGE = "";
+                        }
+                    }
+
+                    if (_break.Equals(true))
+                        break;
+                    else
+                        _turnOnStageControl.STAGE = "";
+                }
+
+                //
+                if (_break.Equals(false))
+                {
+                    foo = new APIResult()
+                    {
+                        Success = true,
+                        State = "OK",
+                        Message = tmpMsg2
+                    };
+                }
+                else
+                {
+                    foo = new APIResult()
+                    {
+                        Success = true,
+                        State = "NG",
+                        Message = tmpMsg2
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                foo = new APIResult()
+                {
+                    Success = true,
+                    State = "NG",
+                    Message = ex.Message
+                };
+            }
+            finally
+            {
+                if (dt is not null)
+                {
+                    dt.Clear(); dt.Dispose(); dt = null; dr = null;
+                }
+            }
+
+            return foo;
+        }
+        [HttpPost("DeleteStageControl")]
+        public APIResult DeleteStageControl([FromBody] StageControlList value)
+        {
+            APIResult foo;
+            string funcName = "DeleteStageControl";
+            string tmpMsg = "";
+            string tmpMsg2 = "";
+            string strResult = "";
+            DataTable dt = null;
+            DataRow[] dr = null;
+            string sql = "";
+            TurnOnStageControl _turnOnStageControl;
+            StageControlList _stageControl;
+            string[] _lstCurrentLocate;
+            string _failedCurrentLocate = "";
+            string _failedCauses = "";
+            string _idxString = "";
+            string _theRecordsState = "";
+            bool _break = false;
+            IBaseDataService _BaseDataService = new BaseDataService();
+
+            try
+            {
+                if (value.STAGE.IndexOf(',') > 0)
+                {
+                    _lstCurrentLocate = value.STAGE.Split(',');
+                }
+                else
+                {
+                    _lstCurrentLocate = new string[] { value.STAGE.ToString() };
+                }
+
+                _turnOnStageControl = new TurnOnStageControl();
+                _turnOnStageControl.EQUIPID = value.EQUIPID;
+                _turnOnStageControl.PORTID = value.PORTID;
+                _stageControl = new StageControlList();
+                _stageControl.EQUIPID = value.EQUIPID;
+                _stageControl.PORTID = value.PORTID;
+
+                foreach (string tmpKey in _lstCurrentLocate)
+                {
+                    _turnOnStageControl.STAGE = tmpKey;
+                    _stageControl.STAGE = tmpKey;
+
+                    sql = _BaseDataService.QueryStageControlList(_stageControl);
+                    dt = _dbTool.GetDataTable(sql);
+
+                    if (dt.Rows.Count > 0)
+                    {
+                        foreach (DataRow drTemp in dt.Rows)
+                        {
+                            tmpMsg = "";
+
+                            try
+                            {
+                                //// 查詢資料
+                                _dbTool.SQLExec(_BaseDataService.DeleteStageControl(_stageControl, true), out tmpMsg, true);
+
+                                if (tmpMsg.Equals(""))
+                                {
+                                    tmpMsg2 = string.Format("The Stage Control [{0}/{1}/{2}] has been delete.", _turnOnStageControl.EQUIPID, _turnOnStageControl.PORTID, _turnOnStageControl.STAGE);
+                                    _break = false;
+                                }
+                                else
+                                {
+                                    tmpMsg2 = string.Format("delete stage control failed. Stage is [{0}/{1}/{2}]. Message: {3}", _turnOnStageControl.EQUIPID, _turnOnStageControl.PORTID, _turnOnStageControl.STAGE, tmpMsg);
+                                    _break = true;
+                                }
+
+                                _logger.Info(tmpMsg2);
+                            }
+                            catch (Exception ex)
+                            {
+                                tmpMsg2 = string.Format("delete stage control failed. Stage Control [{1}/{2}/{3}]. [Exception]: {4}", _turnOnStageControl.EQUIPID, _turnOnStageControl.PORTID, _turnOnStageControl.STAGE, ex.Message);
+                                _logger.Info(tmpMsg2);
+                                _break = true;
+                            }
+
+                            if (_break.Equals(true))
+                                break;
+                            else
+                                _turnOnStageControl.STAGE = "";
+                        }
+                    }
+
+                    if (_break.Equals(true))
+                        break;
+                    else
+                        _turnOnStageControl.STAGE = "";
+                }
+
+                //
+                if (_break.Equals(false))
+                {
+                    foo = new APIResult()
+                    {
+                        Success = true,
+                        State = "OK",
+                        Message = tmpMsg2
+                    };
+                }
+                else
+                {
+                    foo = new APIResult()
+                    {
+                        Success = true,
+                        State = "NG",
+                        Message = tmpMsg2
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                foo = new APIResult()
+                {
+                    Success = true,
+                    State = "NG",
+                    Message = ex.Message
+                };
+            }
+            finally
+            {
+                if (dt is not null)
+                {
+                    dt.Clear(); dt.Dispose(); dt = null; dr = null;
+                }
+            }
+
+            return foo;
+        }
+        [HttpPost("CloneStageControlByEquip")]
+        private APIResult CloneStageControlByEquip([FromBody] StageControlList value)
+        {
+            APIResult foo;
+            string funcName = "CloneStageControlByEquip";
+            string tmpMsg = "";
+            string tmp2Msg = "";
+            DataTable dt = null;
+            DataTable dtTemp = null;
+            DataRow[] dr = null;
+            string sql = "";
+            string tmpKey = "";
+            string _stage = "";
+            string _userID = "";
+            string _tmpNewValue = "";
+            string _paramsName = "";
+            bool _procesingState = false;
+
+            IBaseDataService _BaseDataService = new BaseDataService();
+
+            try
+            {
+
+                _userID = value.UserID.Equals("") ? "-----" : value.UserID;
+
+                dt = _dbTool.GetDataTable(_BaseDataService.QueryStageControlList(value));
+                /*
+                if (dt.Rows.Count > 0)
+                {
+                    dtTemp = _dbTool.GetDataTable(_BaseDataService.QueryWorkgroupSet(value.Workgroup));
+
+                    if (dtTemp.Rows.Count > 0)
+                    {
+                        if (tmpMsg.Equals(""))
+                        {
+                            sql = _BaseDataService.CloneStageForWorkgroupSetByWorkgroupStage(value.newStage, value.Workgroup, value.Stage);
+                            _dbTool.SQLExec(sql, out tmpMsg, true);
+
+                            if (tmpMsg.Equals(""))
+                            {
+                                tmpMsg = string.Format(@"Clone workgroup [{0}] Success. userID [{1}]", value.newWorkgroup, _userID);
+                                _procesingState = true;
+                            }
+                            else
+                            {
+                                tmpMsg = string.Format(@"Clone workgroup [{0}] Fail. userID [{1}]", value.newWorkgroup, _userID);
+                                _procesingState = false;
+                            }
+                        }
+                    }
+                }
+                else
+                {
+                    tmpMsg = string.Format("Workgroup {0} not exist.", value.EQUIPID);
+                }
+                */
+                if (_procesingState)
+                {
+                    _logger.Info(tmpMsg);
+
+                    foo = new APIResult()
+                    {
+                        Success = true,
+                        State = "OK",
+                        Message = tmpMsg
+                    };
+                }
+                else
+                {
+                    _logger.Info(tmpMsg);
+
+                    foo = new APIResult()
+                    {
+                        Success = false,
+                        State = "NG",
+                        Message = tmpMsg
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                foo = new APIResult()
+                {
+                    Success = true,
+                    State = "NG",
+                    Message = ex.Message
+                };
+            }
+            finally
+            {
+                //_logger.LogInformation(string.Format("Info :{0}", value.CarrierID));
+                if (dt is not null)
+                {
+                    dt.Clear(); dt.Dispose(); dt = null; dr = null;
+                }
+            }
+
+            return foo;
         }
     }
 }

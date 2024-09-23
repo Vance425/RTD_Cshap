@@ -1390,6 +1390,12 @@ namespace RTDWebAPI.Service
                             }
                         }
 
+                        dtTemp = _dbTool.GetDataTable(_BaseDataService.QueryMaxPriorityByCmdID(theCmdId));
+                        if(dtTemp.Rows.Count > 0)
+                        {
+                            tmpPriority = dtTemp.Rows[0]["PRIORITY"].ToString().Equals("") ? tmpPriority : dtTemp.Rows[0]["PRIORITY"].ToString();
+                        }
+
                         _logger.Debug(string.Format("[SendTransferCommand][{0}][{1}]", tmpCmdType, tmpPriority));
 
                         string tmp00 = "{{0}, {1}, {2}, {3}}";
@@ -1973,6 +1979,7 @@ namespace RTDWebAPI.Service
                         tmpModel.HoldReas = args[13];
                         tmpModel.POTD = args[14];
                         tmpModel.WaferLot = args[15];
+                        tmpModel.Force = args[16].Equals("") ? false : args[16].ToLower().Equals("true") ? true : false;
 
                         gizmoUri = null;
                         strGizmo = System.Text.Json.JsonSerializer.Serialize<InfoUpdate>(tmpModel);
@@ -2071,8 +2078,17 @@ namespace RTDWebAPI.Service
                         tmpMsg = string.Format("Func[{0}][State : {1}, Message : {2}]", _model, tmpResponse.State, tmpResponse.Message);
                         _logger.Info(tmpMsg);
 
+                        tmpMsg = "";
+                        if(tmpResponse.State.Equals("NG"))
+                        {
+                            bResult = false;
+                            tmpState = "NG";
+                            tmpMsg = tmpResponse.Message;
+                        }
+
                         jRespData = tmpResponse.Data;
-                        tmpMsg = string.Format("State Code : {0}, Reason : {1}.", response.StatusCode, response.ReasonPhrase);
+                        if(tmpMsg.Equals(""))
+                            tmpMsg = string.Format("State Code : {0}, Reason : {1}.", response.StatusCode, response.ReasonPhrase);
                     }
                 }
                 else
@@ -2112,7 +2128,7 @@ namespace RTDWebAPI.Service
                 };
             }
 
-            _logger.Info(string.Format("[{0}]: Result is {1}, Reason : [{2}]", tmpFuncName, foo.State, foo.Message));
+            _logger.Info(string.Format("[{0}, {1}]: Result is {2}, Reason : [{3}]", tmpFuncName, _model, foo.State, foo.Message));
 
             return foo;
         }
@@ -5502,7 +5518,8 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
 
                                             if (_isFurnace)
                                             {
-                                                if(!_furnState.Equals(3))
+                                                //20241017 furnace reject也要做unload
+                                                if(_furnState.Equals(2))
                                                     continue;
                                             }
 
@@ -5830,22 +5847,25 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                                                     {
                                                         if (configuration["AppSettings:Work"].ToUpper().Equals("EWLB"))
                                                         {
-                                                            sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], _lotInCarrier);
-                                                            dtTemp = _dbTool.GetDataTable(sql);
+                                                            try {
+                                                                sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], _lotInCarrier);
+                                                                dtTemp = _dbTool.GetDataTable(sql);
 
-                                                            if (dtTemp.Rows.Count <= 0)
-                                                            {
-                                                                //continue;
-                                                                goto ResetReserve;
-                                                            }
-                                                            else
-                                                            {
-                                                                if (!dtTemp.Rows[0]["stage1"].ToString().Equals(dtTemp.Rows[0]["stage2"].ToString()))
+                                                                if (dtTemp.Rows.Count <= 0)
                                                                 {
-                                                                    _logger.Debug(string.Format("Base LotInfor: LotID= {0}, RTD_Stage={1}, MES_Stage={2}, RTD_State={3}, MES_State={4}", _lotInCarrier, dtTemp.Rows[0]["stage1"].ToString(), dtTemp.Rows[0]["stage2"].ToString(), dtTemp.Rows[0]["state1"].ToString(), dtTemp.Rows[0]["state2"].ToString()));
+                                                                    //continue;
+                                                                    goto ResetReserve;
+                                                                }
+                                                                else
+                                                                {
+                                                                    if (!dtTemp.Rows[0]["stage1"].ToString().Equals(dtTemp.Rows[0]["stage2"].ToString()))
+                                                                    {
+                                                                        _logger.Debug(string.Format("Base LotInfor: LotID= {0}, RTD_Stage={1}, MES_Stage={2}, RTD_State={3}, MES_State={4}", _lotInCarrier, dtTemp.Rows[0]["stage1"].ToString(), dtTemp.Rows[0]["stage2"].ToString(), dtTemp.Rows[0]["state1"].ToString(), dtTemp.Rows[0]["state2"].ToString()));
+                                                                    }
                                                                 }
                                                             }
-
+                                                            catch(Exception ex) { }
+                                                            
                                                             try
                                                             {
                                                                 //不可Load 至已執行過的機台
@@ -5879,7 +5899,7 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
 
                                                                     if (dtTemp.Rows.Count <= 0)
                                                                     {
-                                                                        _logger.Debug(string.Format("[{0}][Failed][{1}][{2}] _Out", "CheckEquipLookupTable", drRecord["EQUIPID"].ToString(), _lotInCarrier));
+                                                                        _logger.Debug(string.Format("[{0}][Failed][{1}][{2}][{3}] _Out", "CheckEquipLookupTable", drRecord["EQUIPID"].ToString(), _lotInCarrier, dtTemp.Rows[0]["equip2"].ToString()));
                                                                         //continue;
                                                                         goto ResetReserve;
                                                                     }
@@ -7258,6 +7278,7 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                     {
                         string tmpCarrierid = "";
                         int eqp_priority = 20;
+                        List<string> lstEquips = new List<string>();
 
                         if (normalTransfer.Transfer.Count > 1)
                         { single = false; }
@@ -7310,9 +7331,35 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                             else
                             {
                                 workinProcessSch.Replace = 0;
+                                string tmpLoad = "";
+                                string tmpUnload = "";
+                                foreach (TransferList trans in normalTransfer.Transfer)
+                                {
+                                    if (trans.CommandType.Equals("LOAD"))
+                                    {
+                                        tmpLoad = trans.Dest;
+                                    }
+                                    else if (trans.CommandType.Equals("UNLOAD"))
+                                    {
+                                        tmpUnload = trans.Source;
+                                    }
+
+                                    if (tmpLoad.Equals(tmpUnload))
+                                    {
+                                        lstEquips.Add(tmpLoad);
+                                        tmpLoad = "";
+                                        tmpUnload = "";
+                                    }
+                                }
                             }
                         }
 
+                        bool isLoad = false;
+                        bool isSwap = false;
+                        string _lastDest = "";
+                        int idxTrans = 0;
+                        string _tmplotid = "";
+                        DateTime dtStart = DateTime.Now;
                         foreach (TransferList trans in normalTransfer.Transfer)
                         {
                             //檢查Dest是否已存在於WorkinprocessSch裡, 存在不能再送, 
@@ -7327,6 +7374,16 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
 
                             if (trans.CommandType.Equals("LOAD"))
                             {
+                                isLoad = true;
+
+                                if (lstEquips.Exists(e => e.EndsWith(trans.Dest)))
+                                {
+                                    workinProcessSch.Replace = 1;
+                                    isSwap = true;
+                                }
+
+                                _lastDest = trans.Dest;
+
                                 dtExist = _dbTool.GetDataTable(_BaseDataService.SelectTableWorkInProcessSchByPortId(trans.Dest, tableOrder));
                                 if (dtExist.Rows.Count > 0)
                                 {
@@ -7379,6 +7436,17 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                             }
                             if (trans.CommandType.Equals("UNLOAD"))
                             {
+                                string _unloadCmdType = "";
+                                isLoad = false;
+
+                                tmpCarrierid = trans.CarrierID.Equals("") ? "*" : trans.CarrierID;
+
+                                if (lstEquips.Exists(e => e.EndsWith(trans.Source)))
+                                {
+                                    workinProcessSch.Replace = 1;
+                                    isSwap = true;
+                                }
+
                                 iTransferNo++;
                                 tmpCarrierid = trans.CarrierID.Equals("") ? "*" : trans.CarrierID;
                                 trans.LotID = normalTransfer.LotID;
@@ -7401,6 +7469,7 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                                     }
                                     if (dtExist.Rows[0]["cmd_state"].ToString().Equals("Initial"))
                                     {
+                                        continue;   //目的地已有Carrier, 跳過
                                         //DeleteWorkInProcessSchByCmdId
                                         APIResult apiResult = new APIResult();
 
@@ -7477,7 +7546,60 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                             if (single)
                                 workinProcessSch.Cmd_Id = Tools.GetCommandID(_dbTool);
                             else
-                                workinProcessSch.Cmd_Id = Tools.GetCommandID(_dbTool);
+                            {
+
+                                workinProcessSch.Cmd_Type = trans.CommandType.Equals("") ? "TRANS" : trans.CommandType;
+
+                                if (_portModel.Equals("2I2OT1"))
+                                {
+                                    if (isLoad)
+                                    {
+                                        if (isSwap)
+                                            workinProcessSch.Cmd_Id = "";
+                                    }
+                                    else
+                                    {
+                                        if (isSwap)
+                                        {
+                                            //workinProcessSch.Cmd_Id = "";
+                                            workinProcessSch.UUID = Tools.GetUnitID(_dbTool);
+                                        }
+                                        //workinProcessSch.Cmd_Id = Tools.GetCommandID(_dbTool);
+                                    }
+                                }
+                                else
+                                {
+                                    if (_DebugMode)
+                                    {
+                                        _logger.Debug(string.Format("----check commands type {0} ", trans.CommandType));
+                                    }
+                                    if (isSwap)
+                                    {
+
+                                        //20240606 DS swap command loadport 1/loadport 2 command id diff
+                                        if (trans.CommandType.Equals("LOAD"))
+                                        {
+                                            if (idxTrans <= 0)
+                                            {
+                                                workinProcessSch.Cmd_Id = "";
+                                            }
+                                            if (idxTrans > 1)
+                                            {
+                                                workinProcessSch.Cmd_Id = "";
+                                            }
+                                            idxTrans++;
+                                        }
+                                        workinProcessSch.UUID = "";
+                                        if (trans.CommandType.Equals("UNLOAD"))
+                                            idxTrans++;
+                                    }
+                                    else
+                                    {
+                                        workinProcessSch.Cmd_Id = "";
+                                        workinProcessSch.UUID = "";
+                                    }
+                                }
+                            }
 
                             tmpMsg = "";
                             //workinProcessSch.UUID = Tools.GetUnitID(_dbTool);  //變更為GID使用, 可查詢同一批派出的指令
@@ -7506,6 +7628,15 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                                             workinProcessSch.CarrierId = dtTemp.Rows[0]["carrier_id"].ToString();
                                             dtInfo = _dbTool.GetDataTable(_BaseDataService.QueryLotInfoByCarrierID(workinProcessSch.CarrierId));
                                         }
+
+                                        sql = _BaseDataService.QueryCommandsTypeByCarrierID(workinProcessSch.CarrierId);
+                                        dtTemp = _dbTool.GetDataTable(sql);
+
+                                        if (dtTemp.Rows.Count > 0)
+                                        {
+                                            if (!workinProcessSch.CarrierType.Equals(dtTemp.Rows[0]["command_type"].ToString()))
+                                                workinProcessSch.CarrierType = dtTemp.Rows[0]["command_type"].ToString();
+                                        }
                                     }
                                 }
                             }
@@ -7533,6 +7664,12 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                             {
                                 _logger.Debug(string.Format("Insert Logic: "));
                             }
+
+                            if (workinProcessSch.Cmd_Id.Equals(""))
+                                workinProcessSch.Cmd_Id = Tools.GetCommandID(_dbTool);
+
+                            if (workinProcessSch.UUID.Equals(""))
+                                workinProcessSch.UUID = Tools.GetUnitID(_dbTool);
 
                             sql = _BaseDataService.InsertTableWorkinprocess_Sch(workinProcessSch, tableOrder);
 
@@ -7569,6 +7706,14 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                             if (!tmpMsg.Equals(""))
                             {
                                 _logger.Debug(string.Format("--Error. Insert Workinprocess_Sch error. [command ID {0}, command Type {1}, source {2}, error:{3}].", workinProcessSch.Cmd_Id, workinProcessSch.Cmd_Type, workinProcessSch.Source, tmpMsg));
+                            }
+
+                            normalTransfer.CommandID = workinProcessSch.Cmd_Id;
+
+                            if (!isSwap)
+                            {
+                                workinProcessSch.Cmd_Id = "";
+                                workinProcessSch.UUID = "";
                             }
                         }
 
@@ -8379,6 +8524,7 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
             List<string> args = new();
             APIResult apiResult = new APIResult();
             string _table = "";
+            string _infoupdate = "";
 
             try
             {
@@ -8401,6 +8547,8 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                         lotid = dr["LOT_ID"].ToString().Equals("") ? "" : dr["LOT_ID"].ToString();
                         carrierId = dr["carrier_id"].ToString().Equals("") ? "" : dr["carrier_id"].ToString();
 
+                        _infoupdate = dr["info_update_dt"].ToString().Equals("NULL") ? "" : dr["info_update_dt"].ToString();
+
                         if (dr["location_type"].ToString().Trim().Equals("ERACK") || dr["location_type"].ToString().Trim().Equals("STK"))
                         {
 
@@ -8421,6 +8569,7 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                                 string v_HOLDREAS = "";
                                 string v_POTD = "";
                                 string v_WAFERLOT = "";
+                                string v_FORCE = "";
                                 try
                                 {
                                     v_CUSTOMERNAME = dr["CUSTOMERNAME"].ToString().Equals("") ? "" : dr["CUSTOMERNAME"].ToString();
@@ -8442,6 +8591,18 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                                         v_HOLDREAS = dtTemp.Rows[0]["HoldReas"].ToString().Equals("") ? "" : dtTemp.Rows[0]["HoldReas"].ToString();
                                         v_WAFERLOT = dtTemp.Rows[0]["waferlotid"].ToString().Equals("") ? "" : dtTemp.Rows[0]["waferlotid"].ToString();
                                     }
+
+                                    if(_infoupdate.Equals(""))
+                                    {
+                                        v_FORCE = "true";
+                                    }
+                                    else
+                                    {
+                                        if(TimerTool("minutes", _infoupdate) >= 3)
+                                        { v_FORCE = "true"; }
+                                        else
+                                        { v_FORCE = "false"; }
+                                    }
                                 }
                                 catch (Exception ex)
                                 {
@@ -8462,16 +8623,27 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                                 args.Add(v_HOLDCODE);//("HoldCode");
                                 args.Add(v_TURNRATIO);//("TURNRATIO");
                                 args.Add(v_EOTD);//("EOTD");
-                                args.Add(v_HOLDREAS);//("EOTD");
-                                args.Add(v_POTD);//("EOTD");
-                                args.Add(v_WAFERLOT);//("EOTD");
+                                args.Add(v_HOLDREAS);//("v_HOLDREAS");
+                                args.Add(v_POTD);//("v_POTD");
+                                args.Add(v_WAFERLOT);//("v_WAFERLOT");
+                                args.Add(v_FORCE);//("v_FORCE");
                                 apiResult = SentCommandtoMCSByModel(_configuration, _logger, "InfoUpdate", args);
+
+                                if (!carrierId.Equals(""))
+                                {
+                                    if (v_FORCE.ToLower().Equals("true"))
+                                    {
+                                        sql = _BaseDataService.CarrierTransferDTUpdate(carrierId, "InfoUpdate");
+                                        _dbTool.SQLExec(sql, out tmpMsg, true);
+                                    }
+                                }
                             }
                             else
                             {
                                 tmpMsg = string.Format("[CarrierLocationUpdate: Carrier [{0}] Not Exist.]", carrierId);
                                 _logger.Debug(tmpMsg);
 
+                                args.Add("");
                                 args.Add("");
                                 args.Add("");
                                 args.Add("");
@@ -8565,6 +8737,7 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                                 string v_HOLDREAS = "";
                                 string v_POTD = "";
                                 string v_WAFERLOT = "";
+                                string v_FORCE = "true";
                                 try
                                 {
                                     v_CUSTOMERNAME = dr["CUSTOMERNAME"].ToString().Equals("") ? "" : dr["CUSTOMERNAME"].ToString();
@@ -8606,10 +8779,20 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                                 args.Add(v_HOLDCODE);//("HoldCode");
                                 args.Add(v_TURNRATIO);//("TURNRATIO");
                                 args.Add(v_EOTD);//("EOTD");
-                                args.Add(v_HOLDREAS);//("EOTD");
-                                args.Add(v_POTD);//("EOTD");
-                                args.Add(v_WAFERLOT);//("EOTD");
+                                args.Add(v_HOLDREAS);//("v_HOLDREAS");
+                                args.Add(v_POTD);//("v_POTD");
+                                args.Add(v_WAFERLOT);//("v_WAFERLOT");
+                                args.Add(v_FORCE);//("v_FORCE");
                                 apiResult = SentCommandtoMCSByModel(_configuration, _logger, "InfoUpdate", args);
+
+                                if (!carrierId.Equals(""))
+                                {
+                                    if (v_FORCE.ToLower().Equals("true"))
+                                    {
+                                        sql = _BaseDataService.CarrierTransferDTUpdate(carrierId, "InfoUpdate");
+                                        _dbTool.SQLExec(sql, out tmpMsg, true);
+                                    }
+                                }
 
                                 if (!lotid.Equals(""))
                                 {
@@ -8641,6 +8824,7 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                                 tmpMsg = string.Format("[CarrierLocationUpdate: Carrier [{0}] Not Exist.]", carrierId);
                                 _logger.Debug(tmpMsg);
 
+                                args.Add("");
                                 args.Add("");
                                 args.Add("");
                                 args.Add("");
@@ -8846,7 +9030,10 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
 
                 alarmMsg = ListAlarmCode[_alarmCode];
 
-                tmpSQL = _BaseDataService.InsertRTDAlarm(tmpAryay);
+                if (!alarmMsg.Split(',')[1].Equals(""))
+                {
+                    tmpSQL = _BaseDataService.InsertRTDAlarm(tmpAryay);
+                }
 
                 if (_commandid.Equals(""))
                     tmpSQL = string.Format(tmpSQL, _commandid, _params, _desc, _eventTrigger);
@@ -9347,6 +9534,7 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
             string sql = "";
             DataTable dt = null;
             DataTable dtTemp = null;
+            string _infoupdate = "";
 
             try
             {
@@ -9356,6 +9544,8 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                 {
                     tmpMsg = string.Format("[TriggerCarrierInfoUpdate][CheckLocationByLotid][{0}][{1}]", _lotid, _configuration["eRackDisplayInfo:contained"]);
                     _logger.Debug(tmpMsg);
+
+                    _infoupdate = dt.Rows[0]["info_update_dt"].ToString().Equals("NULL") ? "" : dt.Rows[0]["info_update_dt"].ToString();
 
                     List<string> args = new();
                     string v_LOT_ID = "";
@@ -9372,6 +9562,7 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                     string v_HOLDREAS = "";
                     string v_POTD = "";
                     string v_WAFERLOT = "";
+                    string v_FORCE = "";
                     try
                     {
                         v_carrier_id = dt.Rows[0]["carrier_id"].ToString().Equals("") ? "" : dt.Rows[0]["carrier_id"].ToString();
@@ -9396,6 +9587,18 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                             v_HOLDREAS = dtTemp.Rows[0]["HoldReas"].ToString().Equals("") ? "" : dtTemp.Rows[0]["HoldReas"].ToString();
                             v_WAFERLOT = dtTemp.Rows[0]["waferlotid"].ToString().Equals("") ? "" : dtTemp.Rows[0]["waferlotid"].ToString();
                         }
+
+                        if (_infoupdate.Equals(""))
+                        {
+                            v_FORCE = "false";
+                        }
+                        else
+                        {
+                            if (TimerTool("minutes", _infoupdate) >= 3)
+                            { v_FORCE = "true"; }
+                            else
+                            { v_FORCE = "false"; }
+                        }
                     }
                     catch (Exception ex)
                     {
@@ -9415,11 +9618,21 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                     args.Add(v_STATE);//("State");
                     args.Add(v_HOLDCODE);//("HoldCode");
                     args.Add(v_TURNRATIO);//("TURNRATIO");
-                    args.Add(v_EOTD);//("EOTD");
-                    args.Add(v_HOLDREAS);//("EOTD");
-                    args.Add(v_POTD);//("EOTD");
-                    args.Add(v_WAFERLOT);//("EOTD");
+                    args.Add(v_EOTD);//("v_EOTD");
+                    args.Add(v_HOLDREAS);//("v_HOLDREAS");
+                    args.Add(v_POTD);//("v_POTD");
+                    args.Add(v_WAFERLOT);//("v_WAFERLOT");
+                    args.Add(v_FORCE);//("EOTD");
                     SentCommandtoMCSByModel(_configuration, _logger, "InfoUpdate", args);
+
+                    if (!v_carrier_id.Equals(""))
+                    {
+                        if (v_FORCE.ToLower().Equals("true"))
+                        {
+                            sql = _BaseDataService.CarrierTransferDTUpdate(v_carrier_id, "InfoUpdate");
+                            _dbTool.SQLExec(sql, out tmpMsg, true);
+                        }
+                    }
                 }
 
                 bResult = true;
@@ -10763,7 +10976,7 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                 }
                 else
                 {
-                    tmpMsg = String.Format("Check Lookup Table Failed. [{0}][{1}][{2}][{3}]", funcName, _equip, _lotid);
+                    tmpMsg = String.Format("Check Lookup Table Failed. [{0}][{1}][{2}][{3}]", funcName, _equip, _lotid, dt.Rows[0]["equip2"].ToString());
                     _logger.Debug(tmpMsg);
                     bResult = false;
                 }
@@ -11135,7 +11348,10 @@ _table = _configuration["SyncExtenalData:AdsInfo:Table:Prod"];
 
                         _sector = _secTemp;
 
-                        _lstTemp.Add(string.Format("{0}:{1}", drSector["erackID"].ToString(), _sector));
+                        if(_secTemp.LastIndexOf(':') < 0)
+                            _lstTemp.Add(string.Format("{0}:{1}", drSector["erackID"].ToString(), _sector));
+                        else
+                            _lstTemp.Add(string.Format("{0}{1}", drSector["erackID"].ToString(), _sector));
                     }
                 }
 
@@ -12202,6 +12418,57 @@ Detail: {6}", rtdAlarms.UnitType, rtdAlarms.UnitID, rtdAlarms.Code, rtdAlarms.Ca
                 value = _tmpDate.ToString("yyyy/MM/dd HH:mm:ss");
             }
             catch (Exception ex) { }
+
+            return value;
+        }
+        public bool SyncEotdData(DBTool _dbTool, IConfiguration configuration, ILogger _logger)
+        {
+            Boolean value = false;
+            DataTable dt = null;
+            DataTable dtTemp = null;
+            string tmpMsg = "";
+
+            //// 查詢儲存貨架資料
+            dt = _dbTool.GetDataTable(_BaseDataService.QueryAllLotOnERack());
+            if (dt.Rows.Count > 0)
+            {
+                string _lotid = "";
+                string _eotd = "";
+                string _newEotd = "";
+                string _exceptionMsg = "";
+
+                foreach (DataRow dr2 in dt.Rows)
+                {
+                    try {
+
+                        _lotid = dr2["lotid"].ToString();
+                        _eotd = dr2["enddate"].ToString();
+
+                        dtTemp = _dbTool.GetDataTable(_BaseDataService.GetNewEotdByLot(_lotid));
+                        if (dtTemp.Rows.Count > 0)
+                        {
+                            _newEotd = dtTemp.Rows[0]["enddate"].ToString();
+                        }
+
+                        if (!_newEotd.Equals(""))
+                        {
+                            if (!_newEotd.Equals(_eotd))
+                            {
+                                _dbTool.SQLExec(_BaseDataService.UpdateEotdToLotInfo(_lotid, _newEotd), out tmpMsg, true);
+                                if (!tmpMsg.Equals(""))
+                                {
+                                    _exceptionMsg = string.Format("[{0}][{1}][{2}]", "SyncEotdData", "UpdateEotdToLotInfo", tmpMsg);
+                                    _logger.Debug(_exceptionMsg);
+                                }
+                            }
+                        }
+                    }
+                    catch(Exception ex) {
+                        _exceptionMsg = string.Format("[{0}][{1}][{2}]", "SyncEotdData", "Exception", ex.Message);
+                        _logger.Debug(_exceptionMsg);
+                    }
+                }
+            }
 
             return value;
         }
