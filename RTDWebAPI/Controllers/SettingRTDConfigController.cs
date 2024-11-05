@@ -2360,7 +2360,7 @@ namespace RTDWebAPI.Controllers
                                     foreach (string tmpParam in _lstParams)
                                     {
 
-                                        if (!dr[0][_paramsName].ToString().Equals(""))
+                                        if (!dr[0][_paramsName].Equals(null))
                                         {
                                             sql = _BaseDataService.SetParameterWorkgroupSetByWorkgroupStage(value.Workgroup, value.Stage, value.Parameter, value.IsNumber.Equals(true) ? int.Parse(tmpParam) : tmpParam);
                                             _dbTool.SQLExec(sql, out tmpMsg, true);
@@ -2482,8 +2482,10 @@ namespace RTDWebAPI.Controllers
             string tmpMsg = "";
             string strResult = "";
             DataTable dt = null;
+            DataTable dtTemp = null;
             DataRow[] dr = null;
             string sql = "";
+            
             IBaseDataService _BaseDataService = new BaseDataService();
 
             try
@@ -2494,7 +2496,95 @@ namespace RTDWebAPI.Controllers
 
                 if (dt.Rows.Count > 0)
                 {
-                    strResult = JsonConvert.SerializeObject(dt);
+                    string[] tmpStr = new string[dt.Rows.Count];
+                    string tmpJson = "";
+                    string tmpAllJson = "";
+                    JArray jsonArray = new JArray();
+                    JObject jsonObject = new JObject();
+                    JObject jsonObj2 = new JObject();
+
+                    //foreach (DataRow row in dt.Rows)
+                    tmpJson = JsonConvert.SerializeObject(dt);
+
+                    if (tmpJson.TrimStart().StartsWith("["))
+                    {
+                        jsonArray = JArray.Parse(tmpJson);
+                        // Process the array
+                    }
+                    else
+                    {
+                        jsonObject = JObject.Parse(tmpJson);
+                        // Process the object
+                    }
+                    string tmpBBB = "";
+                    string _stage = "";
+                    string _workgroup = "";
+                    string _inErack = "";
+                    Dictionary<string, string> tmpDict = new Dictionary<string, string>();
+                    Dictionary<string, string> tmpArray;
+                    for (int i = 0; i < jsonArray.Count; i++)
+                    {
+
+                        tmpJson = jsonArray[i].ToString().Replace("\r\n", "").Replace("\"{", "").Replace("}\"", "");
+                        tmpDict = JsonConvert.DeserializeObject<Dictionary<string, string>>(tmpJson);
+
+                        try
+                        {
+
+                            _stage = tmpDict["STAGE"] is null ? "" : tmpDict["STAGE"].ToString();
+                            _workgroup = tmpDict["WORKGROUP"] is null ? "" : tmpDict["WORKGROUP"].ToString();
+
+                            sql = _BaseDataService.QueryWorkgroupSet(_workgroup, _stage);
+                            dtTemp = _dbTool.GetDataTable(sql);
+
+                            if (dtTemp.Rows.Count > 0)
+                            {
+                                _inErack = dtTemp.Rows[0]["in_erack"].ToString();
+                            }
+
+                            sql = _BaseDataService.QueryRackByGroupID(_inErack);
+                            dtTemp = _dbTool.GetDataTable(sql);
+
+                            if (dtTemp.Rows.Count > 0)
+                            {
+                                foreach (DataRow drRecord in dtTemp.Rows)
+                                {
+                                    tmpArray = new Dictionary<string, string>();
+                                    tmpArray.Add("erackID", drRecord["erackID"].ToString());
+                                    tmpArray.Add("groupID", drRecord["groupID"].ToString());
+                                    tmpArray.Add("location", drRecord["location"].ToString());
+                                    tmpArray.Add("validCarrierType", drRecord["validCarrierType"].ToString());
+
+                                    //row["destination"] = JObject.Parse(string.Format("[{0}]", JsonConvert.SerializeObject(tmpArray.ToString()))).ToString();
+
+                                    if (tmpBBB.Equals(""))
+                                    {
+                                        tmpBBB = string.Format("{0}", JObject.Parse(string.Format("[{0}]", JsonConvert.SerializeObject(tmpArray.ToString()))).ToString());
+                                    }
+                                    else
+                                    {
+                                        tmpBBB = string.Format("{0},{1}", tmpBBB, JObject.Parse(string.Format("[{0}]", JsonConvert.SerializeObject(tmpArray.ToString()))).ToString());
+                                    }
+                                }
+
+                                //tmpJson = tmpJson.Replace("\"DEST\"", string.Format("{0}", MyDictionaryToJson(tmpBBB)));
+                                tmpJson = tmpJson.Replace("\"DEST\"", string.Format("[{0}]", tmpBBB));
+                            }
+                        }
+                        catch (Exception ex) { }
+
+                        //tmpAllJson = string.Format("{0}", tmpJson);
+                        if (tmpAllJson.Equals(""))
+                        {
+                            tmpAllJson = string.Format("{0}", tmpJson);
+                        }
+                        else
+                        {
+                            tmpAllJson = string.Format("{0},{1}", tmpAllJson, tmpJson);
+                        }
+                    }
+                    //strResult = JsonConvert.SerializeObject(tmpStr);
+                    strResult = string.Format("{0}", tmpAllJson);
                 }
             }
             catch (Exception ex)
@@ -2516,6 +2606,14 @@ namespace RTDWebAPI.Controllers
             public string Workgroup { get; set; }
             public string Stage { get; set; }
             public string Midway { get; set; }
+            public string UserID { get; set; }
+        }
+
+        public class ClassRemoveMidways
+        {
+            public string Workgroup { get; set; }
+            public string Stage { get; set; }
+            public string idx { get; set; }
             public string UserID { get; set; }
         }
         [HttpPost("InsertMidways")]
@@ -2760,6 +2858,151 @@ namespace RTDWebAPI.Controllers
 
             return foo;
         }
+        [HttpPost("DeleteMidways")]
+        public APIResult DeleteMidways([FromBody] ClassRemoveMidways value)
+        {
+            APIResult foo;
+            string funcName = "DeleteMidways";
+            string tmpMsg = "";
+            string tmpMsg2 = "";
+            string strResult = "";
+            DataTable dt = null;
+            DataRow[] dr = null;
+            string sql = "";
+            string[] _lstRemoveIdx;
+            string _strRemoveIdx = "";
+            bool _break = false;
+            IBaseDataService _BaseDataService = new BaseDataService();
+
+            try
+            {
+                if (value.idx.IndexOf(',') > 0)
+                {
+                    _lstRemoveIdx = value.idx.Split(',');
+                }
+                else
+                {
+                    if(value.idx.Equals(""))
+                        _lstRemoveIdx = new string[] { };
+                    else
+                        _lstRemoveIdx = new string[] { value.idx.ToString() };
+                }
+
+                if (_lstRemoveIdx.Length > 0)
+                {
+                    foreach (string tmpIdx in _lstRemoveIdx)
+                    {
+                        if (_strRemoveIdx.Equals(""))
+                        {
+                            _strRemoveIdx = string.Format("'{0}'", tmpIdx);
+                        }
+                        else
+                        {
+                            _strRemoveIdx = string.Format("{0},'{1}'", _strRemoveIdx, tmpIdx);
+                        }
+                    }
+
+                    try
+                    {
+                        //// 查詢資料
+                        _dbTool.SQLExec(_BaseDataService.ResetMidways(_strRemoveIdx, true), out tmpMsg, true);
+
+                        if (tmpMsg.Equals(""))
+                        {
+                            //tmpMsg2 = string.Format("The midways  [{0}/{1}/{2}] has been delete.", _turnOnStageControl.EQUIPID, _turnOnStageControl.PORTID, _turnOnStageControl.STAGE);
+                            _break = true;
+                        }
+                        else
+                        {
+                            //tmpMsg2 = string.Format("delete stage control failed. Stage is [{0}/{1}/{2}]. Message: {3}", _turnOnStageControl.EQUIPID, _turnOnStageControl.PORTID, _turnOnStageControl.STAGE, tmpMsg);
+                            _break = false;
+                        }
+
+                        _logger.Info(tmpMsg2);
+                    }
+                    catch (Exception ex)
+                    {
+                        //tmpMsg2 = string.Format("delete stage control failed. Stage Control [{1}/{2}/{3}]. [Exception]: {4}", _turnOnStageControl.EQUIPID, _turnOnStageControl.PORTID, _turnOnStageControl.STAGE, ex.Message);
+                        _logger.Info(tmpMsg2);
+                        _break = false;
+                    }
+                }
+                else
+                {
+                    if (!value.Workgroup.Equals(""))
+                    {
+                        if (!value.Stage.Equals(""))
+                        {
+                            ///remove midways by workgroup, stage 
+
+                            try
+                            {
+                                //// 查詢資料
+                                _dbTool.SQLExec(_BaseDataService.ResetMidways(value.Workgroup, value.Stage, true), out tmpMsg, true);
+
+                                if (tmpMsg.Equals(""))
+                                {
+                                    //tmpMsg2 = string.Format("The midways  [{0}/{1}/{2}] has been delete.", _turnOnStageControl.EQUIPID, _turnOnStageControl.PORTID, _turnOnStageControl.STAGE);
+                                    _break = true;
+                                }
+                                else
+                                {
+                                    //tmpMsg2 = string.Format("delete stage control failed. Stage is [{0}/{1}/{2}]. Message: {3}", _turnOnStageControl.EQUIPID, _turnOnStageControl.PORTID, _turnOnStageControl.STAGE, tmpMsg);
+                                    _break = false;
+                                }
+
+                                _logger.Info(tmpMsg2);
+                            }
+                            catch (Exception ex)
+                            {
+                                //tmpMsg2 = string.Format("delete stage control failed. Stage Control [{1}/{2}/{3}]. [Exception]: {4}", _turnOnStageControl.EQUIPID, _turnOnStageControl.PORTID, _turnOnStageControl.STAGE, ex.Message);
+                                _logger.Info(tmpMsg2);
+                                _break = false;
+                            }
+                        }
+                        else
+                        {
+                            ///did not remove any thing
+                        }
+                    }
+                    else
+                    { //did not remove any thing
+
+                    }
+                }
+
+                //
+                if (_break.Equals(true))
+                {
+                    foo = new APIResult()
+                    {
+                        Success = true,
+                        State = "OK",
+                        Message = tmpMsg2
+                    };
+                }
+                else
+                {
+                    foo = new APIResult()
+                    {
+                        Success = true,
+                        State = "NG",
+                        Message = tmpMsg2
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                foo = new APIResult()
+                {
+                    Success = true,
+                    State = "NG",
+                    Message = string.Format("[{0}][Exception: {1}]", funcName, ex.Message)
+                };
+            }
+
+            return foo;
+        }
 
         [HttpPost("QueryStageControlList")]
         public ActionResult<String> QueryStageControlList([FromBody] StageControlList value)
@@ -2769,6 +3012,7 @@ namespace RTDWebAPI.Controllers
             string tmpMsg = "";
             string strResult = "";
             DataTable dt = null;
+            DataTable dtTemp = null;
             DataRow[] dr = null;
             string sql = "";
             IBaseDataService _BaseDataService = new BaseDataService();
@@ -2781,7 +3025,81 @@ namespace RTDWebAPI.Controllers
 
                 if (dt.Rows.Count > 0)
                 {
-                    strResult = JsonConvert.SerializeObject(dt);
+                    string[] tmpStr = new string[dt.Rows.Count];
+                    string tmpJson = "";
+                    JArray jsonArray = new JArray();
+                    JObject jsonObject = new JObject();
+                    JObject jsonObj2 = new JObject();
+
+                    //foreach (DataRow row in dt.Rows)
+                    tmpJson = JsonConvert.SerializeObject(dt);
+
+                    if (tmpJson.TrimStart().StartsWith("["))
+                    {
+                        jsonArray = JArray.Parse(tmpJson);
+                        // Process the array
+                    }
+                    else
+                    {
+                        jsonObject = JObject.Parse(tmpJson);
+                        // Process the object
+                    }
+                    string tmpBBB = "";
+                    string _stage = "";
+                    string _workgroup = "";
+                    string _inErack = "";
+                    Dictionary<string, string> tmpDict = new Dictionary<string, string>();
+                    Dictionary<string, string> tmpArray; 
+                    for (int i = 0; i < jsonArray.Count; i++)
+                    {
+                        
+                        tmpJson = jsonArray[i].ToString().Replace("\r\n","").Replace("\"{","").Replace("}\"", "");
+                        tmpDict = JsonConvert.DeserializeObject<Dictionary<string, string>>(tmpJson);
+
+                        try {
+
+                            _stage = tmpDict["STAGE"] is null ? "" :tmpDict["STAGE"].ToString();
+                            _workgroup = tmpDict["WORKGROUP"] is null ? "" :tmpDict["WORKGROUP"].ToString();
+
+                            sql = _BaseDataService.QueryWorkgroupSet(_workgroup, _stage);
+                            dtTemp = _dbTool.GetDataTable(sql);
+
+                            if (dtTemp.Rows.Count > 0)
+                            {
+                                _inErack = dtTemp.Rows[0]["in_erack"].ToString();
+                            }
+
+                            sql = _BaseDataService.QueryRackByGroupID(_inErack);
+                            dtTemp = _dbTool.GetDataTable(sql);
+
+                            if (dtTemp.Rows.Count > 0)
+                            {
+                                foreach (DataRow drRecord in dtTemp.Rows)
+                                {
+                                    tmpArray = new Dictionary<string, string>();
+                                    tmpArray.Add("erackID", drRecord["erackID"].ToString());
+                                    tmpArray.Add("groupID", drRecord["groupID"].ToString());
+                                    tmpArray.Add("location", drRecord["location"].ToString());
+                                    tmpArray.Add("validCarrierType", drRecord["validCarrierType"].ToString());
+
+                                    //row["destination"] = JObject.Parse(string.Format("[{0}]", JsonConvert.SerializeObject(tmpArray.ToString()))).ToString();
+                                    tmpJson = tmpJson.Replace("\"DEST\"", string.Format("{0}", MyDictionaryToJson(tmpArray)));
+
+                                    if (tmpBBB.Equals(""))
+                                    {
+                                        tmpBBB = string.Format("{0}", tmpJson);
+                                    }
+                                    else
+                                    {
+                                        tmpBBB = string.Format("{0},{1}", tmpBBB, tmpJson);
+                                    }
+                                }
+                            }
+                        }
+                        catch(Exception ex) { }
+                    }
+                    //strResult = JsonConvert.SerializeObject(tmpStr);
+                    strResult = string.Format("[{0}]", tmpBBB);
                 }
             }
             catch (Exception ex)
@@ -2798,6 +3116,13 @@ namespace RTDWebAPI.Controllers
 
             return strResult;
         }
+        string MyDictionaryToJson(Dictionary<string, string> dict)
+        {
+            var entries = dict.Select(d =>
+                string.Format("\"{0}\": \"{1}\"", d.Key, string.Join(",", d.Value)));
+            return "{" + string.Join(",", entries) + "}";
+        }
+
         [HttpPost("InsertStageControl")]
         public APIResult InsertStageControl([FromBody] StageControlList value)
         {
@@ -2817,6 +3142,8 @@ namespace RTDWebAPI.Controllers
             string _currentdatetime = "";
             bool _break = false;
             IBaseDataService _BaseDataService = new BaseDataService();
+            string _successInsert = "";
+            string _successMsg = "";
 
             try
             {
@@ -2869,6 +3196,7 @@ namespace RTDWebAPI.Controllers
                             if (tmpMsg.Equals(""))
                             {
                                 _failedCauses = string.Format("Insert Stage Control. [{0}/{1}/{2}][Success]", _stageControl.EQUIPID, _stageControl.PORTID, _stageControl.STAGE);
+                                _successInsert = _successInsert.Equals("") ? string.Format("{0}", _stageControl.STAGE) : string.Format("{0},{1}", _successInsert, _stageControl.STAGE);
                                 _break = false;
                             }
                             else
@@ -2888,11 +3216,16 @@ namespace RTDWebAPI.Controllers
                 //
                 if (!_break)
                 {
+                    if (_successInsert.Equals(""))
+                        _successMsg = "No anything been insert!";
+                    else
+                        _successMsg = string.Format("Insert Stage Control. [{0}/{1}, {2}][Success]", value.EQUIPID, value.PORTID, _successInsert);
+
                     foo = new APIResult()
                     {
                         Success = true,
                         State = "OK",
-                        Message = _failedCauses
+                        Message = _successMsg
                     };
                 }
                 else
@@ -3079,6 +3412,8 @@ namespace RTDWebAPI.Controllers
             string _idxString = "";
             string _theRecordsState = "";
             bool _break = false;
+            string _removesuccess = "";
+            string _removefail = "";
             IBaseDataService _BaseDataService = new BaseDataService();
 
             try
@@ -3098,6 +3433,7 @@ namespace RTDWebAPI.Controllers
                 _stageControl = new StageControlList();
                 _stageControl.EQUIPID = value.EQUIPID;
                 _stageControl.PORTID = value.PORTID;
+
 
                 foreach (string tmpKey in _lstCurrentLocate)
                 {
@@ -3120,13 +3456,19 @@ namespace RTDWebAPI.Controllers
 
                                 if (tmpMsg.Equals(""))
                                 {
-                                    tmpMsg2 = string.Format("The Stage Control [{0}/{1}/{2}] has been delete.", _turnOnStageControl.EQUIPID, _turnOnStageControl.PORTID, _turnOnStageControl.STAGE);
-                                    _break = false;
+                                    //tmpMsg2 = string.Format("The Stage Control [{0}/{1}/{2}] has been delete.", _turnOnStageControl.EQUIPID, _turnOnStageControl.PORTID, _turnOnStageControl.STAGE);
+                                    if(_removesuccess.Equals(""))
+                                        _removesuccess = _stageControl.STAGE;
+                                    else
+                                        _removesuccess = string.Format("{0},{1}", _removesuccess, _stageControl.STAGE);
                                 }
                                 else
                                 {
-                                    tmpMsg2 = string.Format("delete stage control failed. Stage is [{0}/{1}/{2}]. Message: {3}", _turnOnStageControl.EQUIPID, _turnOnStageControl.PORTID, _turnOnStageControl.STAGE, tmpMsg);
-                                    _break = true;
+                                    //tmpMsg2 = string.Format("delete stage control failed. Stage is [{0}/{1}/{2}]. Message: {3}", _turnOnStageControl.EQUIPID, _turnOnStageControl.PORTID, _turnOnStageControl.STAGE, tmpMsg);
+                                    if (_removefail.Equals(""))
+                                        _removefail = _stageControl.STAGE;
+                                    else
+                                        _removefail = string.Format("{0},{1}", _removefail, _stageControl.STAGE);
                                 }
 
                                 _logger.Info(tmpMsg2);
@@ -3135,7 +3477,6 @@ namespace RTDWebAPI.Controllers
                             {
                                 tmpMsg2 = string.Format("delete stage control failed. Stage Control [{1}/{2}/{3}]. [Exception]: {4}", _turnOnStageControl.EQUIPID, _turnOnStageControl.PORTID, _turnOnStageControl.STAGE, ex.Message);
                                 _logger.Info(tmpMsg2);
-                                _break = true;
                             }
 
                             if (_break.Equals(true))
@@ -3143,17 +3484,21 @@ namespace RTDWebAPI.Controllers
                             else
                                 _turnOnStageControl.STAGE = "";
                         }
+
+                        _break = true;
                     }
 
-                    if (_break.Equals(true))
-                        break;
-                    else
-                        _turnOnStageControl.STAGE = "";
+                    _turnOnStageControl.STAGE = "";
                 }
 
                 //
-                if (_break.Equals(false))
+                if (_break.Equals(true))
                 {
+                    if (!_removefail.Equals(""))
+                    {
+                        tmpMsg2 = string.Format("delete stage control failed. Success [{0}] / Failed[{1}]", _removesuccess, _removefail);
+                    }
+
                     foo = new APIResult()
                     {
                         Success = true,
@@ -3288,6 +3633,144 @@ namespace RTDWebAPI.Controllers
             }
 
             return foo;
+        }
+
+        [HttpPost("ResetProrityForWorkroupSet")]
+        public APIResult ResetProrityForWorkroupSet([FromBody] ClassStagePriorityWorkgroupSet value)
+        {
+            APIResult foo;
+            string funcName = "ResetProrityForWorkroupSet";
+            string tmpMsg = "";
+            DataTable dt = null;
+            DataRow[] dr = null;
+            string sql;
+            DateTime dtLimit;
+            IBaseDataService _BaseDataService = new BaseDataService();
+            string WorkgroupID = "";
+            string StageID = "";
+            int Current_Priority = 0;
+
+            try
+            {
+                foo = new APIResult()
+                {
+                    Success = false,
+                    State = "NG",
+                    Message = tmpMsg
+                };
+
+                if (value.Workgroup.Equals(""))
+                {
+                    //_dbTool.SQLExec(_BaseDataService.UpdateRtdAlarm(value.DateTime), out tmpMsg, true);
+                    tmpMsg = "Workgroup can not be empty. please check.";
+
+                    foo = new APIResult()
+                    {
+                        Success = false,
+                        State = "NG",
+                        Message = tmpMsg
+                    };
+
+                    return foo;
+                }
+                else
+                {
+                    dt = _dbTool.GetDataTable(_BaseDataService.QueryWorkgroupSet(value.Workgroup, value.Stage));
+
+                    if (dt.Rows.Count <= 0)
+                    {
+                        tmpMsg = string.Format("Stage [{0}] not exist.. please check.", value.Stage);
+
+                        foo = new APIResult()
+                        {
+                            Success = false,
+                            State = "NG",
+                            Message = tmpMsg
+                        };
+
+                        return foo;
+                    }
+                    else
+                    {
+                        if (!dt.Rows[0]["Workgroup"].ToString().Equals(""))
+                            WorkgroupID = dt.Rows[0]["Workgroup"].ToString().Equals("") ? "" : dt.Rows[0]["Workgroup"].ToString();
+
+                        if (!dt.Rows[0]["Stage"].ToString().Equals(""))
+                            StageID = dt.Rows[0]["Stage"].ToString().Equals("") ? "" : dt.Rows[0]["Stage"].ToString();
+                    }
+                }
+
+                dt = _dbTool.GetDataTable(_BaseDataService.QueryWorkgroupSet(WorkgroupID, StageID));
+
+                if (dt.Rows.Count > 0)
+                {
+                    Current_Priority = int.Parse(dt.Rows[0]["priority"].ToString());
+
+                    if (!value.Priority.Equals(Current_Priority))
+                    {
+                        sql = String.Format(_BaseDataService.UpdatePriorityForWorkgroupSet(WorkgroupID, StageID, value.Priority));
+                        _dbTool.SQLExec(sql, out tmpMsg, true);
+
+                        if (tmpMsg.Equals(""))
+                        {
+                            foo = new APIResult()
+                            {
+                                Success = true,
+                                State = "OK",
+                                Message = tmpMsg
+                            };
+                        }
+                        else
+                        {
+                            tmpMsg = string.Format("[{0}] Workgroup update Issue. Workgroup [{1}] stage [{2}] Priority [{3}]. please check.", funcName, WorkgroupID, StageID, value.Priority);
+                            foo = new APIResult()
+                            {
+                                Success = false,
+                                State = "NG",
+                                Message = tmpMsg
+                            };
+                        }
+                    }
+                }
+                else
+                {
+                    tmpMsg = string.Format("[{0}] Workgroup Error. Workgroup [{1}] not exist.", funcName, WorkgroupID);
+                    foo = new APIResult()
+                    {
+                        Success = false,
+                        State = "NG",
+                        Message = tmpMsg
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                foo = new APIResult()
+                {
+                    Success = true,
+                    State = "NG",
+                    Message = ex.Message
+                };
+            }
+            finally
+            {
+                //_logger.LogInformation(string.Format("Info :{0}", value.CarrierID));
+                if (dt is not null)
+                {
+                    dt.Clear(); dt.Dispose(); dt = null; dr = null;
+                }
+            }
+
+            if (!tmpMsg.Equals(""))
+                _logger.Debug(tmpMsg);
+
+            return foo;
+        }
+        public class ClassStagePriorityWorkgroupSet
+        {
+            public string Workgroup { get; set; }
+            public string Stage { get; set; }
+            public int Priority { get; set; }
         }
     }
 }

@@ -321,6 +321,7 @@ namespace RTDWebAPI.Interface
         string InsertMidways(InsertMidways _cond);
         string TurnOnMidways(string _idx, bool turnOn);
         string ResetMidways(string _idx, bool _del);
+        string ResetMidways(string _workgroup, string _stage, bool _del);
         string QueryStageControlAllList(StageControlList _cond);
         string QueryStageControlList(StageControlList _cond);
         string InsertStageControl(StageControlList _cond);
@@ -330,5 +331,11 @@ namespace RTDWebAPI.Interface
         string CarrierTransferDTUpdate(string _carrierid, string _updateType);
         string QueryAllLotOnERack();
         string GetNewEotdByLot(string _lotid);
+        string GetDataFromTableByLot(string _table, string _colname, string _lotid);
+        string UpdateTurnRatioToLotInfo(string _lotid, string _turnratio);
+        string ResetSchseqByModel(string _seq, string _cdt);
+        string SelectEquipPortInfo2();
+        string QueryERackInfo2();
+        string UpdatePriorityForWorkgroupSet(string _Workgroup, string _stage, int _priority);
     }
 }

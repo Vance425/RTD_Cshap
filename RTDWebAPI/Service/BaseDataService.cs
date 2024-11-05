@@ -311,6 +311,7 @@ where a.carrier_id = '{0}'", CarrierID);
 
             //semi_int.actl_ewlberack_vw@semi_int
             //20240731 change sequence priority > EOTD > layer >>order by c.sch_seq asc, eotd(b.lot_id) asc, a.carrier_id >>order by eotd(b.lot_id) asc, c.sch_seq asc, a.carrier_id
+            ///20241028 eotd(b.lot_id) change to c.enddate //20241104 rollback
 #if DEBUG
             strSQL = string.Format(@"select a.carrier_id, b.lot_id, eotd, nvl(c.sch_seq, 0) as sch_seq from CARRIER_TRANSFER a
                                             left join CARRIER_LOT_ASSOCIATE b on b.carrier_id=a.carrier_id
@@ -328,6 +329,7 @@ where a.carrier_id = '{0}'", CarrierID);
         {
             string strSQL = "";
             //semi_int.actl_ewlberack_vw@semi_int
+            //20241028 eotd(b.lot_id) change to c.enddate   //20241104 rollback
 #if DEBUG
             strSQL = string.Format(@"select a.carrier_id, b.lot_id, eotd, nvl(c.sch_seq, 0) as sch_seq, c.equiplist, a.location_type from CARRIER_TRANSFER a
                                             left join CARRIER_LOT_ASSOCIATE b on b.carrier_id=a.carrier_id
@@ -382,12 +384,15 @@ where a.carrier_id = '{0}'", CarrierID);
                                             left join RTD_DEFAULT_SET c on c.paramvalue = b.port_state and c.parameter = 'EqpPortType'
                                             where a.equipid = '{0}'
                                             order by b.port_seq", equipId);*/
+            string _tmpCdi = "";
+            if (!equipId.Equals(""))
+                _tmpCdi = string.Format("where a.equipid = '{0}'", equipId);
 
             string strSQL = string.Format(@"select distinct a.equipid, b.port_seq, b.port_id, b.port_state, b.port_type, b.carrier_type, c.description, b.disable, b.isLock from eqp_status a
                                             left join EQP_PORT_SET b on b.equipid = a.equipid
                                             left join RTD_DEFAULT_SET c on c.paramvalue = b.port_state and c.parameter = 'EqpPortType'
-                                            where a.equipid = '{0}'
-                                            order by b.port_seq", equipId);
+                                            {0}
+                                            order by b.port_seq", _tmpCdi);
 
             return strSQL;
         }
@@ -600,6 +605,7 @@ left join carrier_transfer ct on ct.carrier_id=ca.carrier_id
         }
         public string ReflushProcessLotInfo(bool _OnlyStage)
         {
+            //20241104 reflush schedule seq do by all carrier  //remove and c.location_type in ('ERACK','STK')
             string _orderby = "";
 
             if (_OnlyStage)
@@ -607,9 +613,9 @@ left join carrier_transfer ct on ct.carrier_id=ca.carrier_id
             else
                 _orderby = "a.customername, a.stage, a.rtd_state, a.priority desc, a.lot_age desc";
 
-            string strSQL = string.Format(@"select * from LOT_INFO a left join carrier_lot_associate b on b.lot_id = a.lotid left join carrier_transfer c on c.carrier_id = b.carrier_id where a.rtd_state not in ('HOLD','PROC','DELETED', 'COMPLETED') 
+            string strSQL = string.Format(@"select a.*, '' as adslot, '' as eotd, 0 as turnratio3, 0 as stageage from LOT_INFO a left join carrier_lot_associate b on b.lot_id = a.lotid left join carrier_transfer c on c.carrier_id = b.carrier_id where a.rtd_state not in ('HOLD','PROC','DELETED', 'COMPLETED') 
                             and to_date(to_char(trunc(a.starttime, 'DD'),'yyyy/MM/dd HH24:mi:ss'), 'yyyy/MM/dd HH24:mi:ss') <= sysdate
-                            and c.location_type in ('ERACK','STK')
+                            and c.enable=1
                             order by {0}", _orderby);
 
             //2024/06/03 Remove customername  //order by  a.customername, a.stage, a.rtd_state, a.priority asc , a.lot_age desc";
@@ -1438,7 +1444,7 @@ left join carrier_transfer ct on ct.carrier_id=ca.carrier_id
             if (!_EquipID.Equals(""))
                 tmpCoditions = string.Format("and a.equipid = '{0}'", _EquipID);
 
-            string strSQL = string.Format(@"select a.equipid, a.workgroup, b.in_erack, b.out_erack, b.usefailerack, b.f_erack, b.stage, b.pretransfer, b.QTIME_LOW, b.QTIME_HIGH, b.priority as prio, b.checkeqplookuptable, b.uselaststage, b.IsFurnace, b.dummy_locate, b.effectiveslot, b.maximumqty, b.checkcustdevice, b.stagecontroller, b.cannotsame, b.aoimeasurement, b.rcpconstraint, b.wip_warehouse, b.enablewipwarehouse, b.bindworkgroup, b.preparenextworkgroup, b.nextworkgroup, b.prepareqty, b.sidewarehouse, b.swsidewh, b.onlysidewh, b.limitforsidewh, b.preparecarrierforsidewh, b.cannot, b.dummycarrier from eqp_status a
+            string strSQL = string.Format(@"select a.equipid, a.workgroup, b.in_erack, b.out_erack, b.usefailerack, b.f_erack, b.stage, b.pretransfer, b.QTIME_LOW, b.QTIME_HIGH, b.priority as prio, b.checkeqplookuptable, b.uselaststage, b.IsFurnace, b.dummy_locate, b.effectiveslot, b.maximumqty, b.minmumqty, b.checkcustdevice, b.stagecontroller, b.cannotsame, b.aoimeasurement, b.rcpconstraint, b.wip_warehouse, b.enablewipwarehouse, b.bindworkgroup, b.preparenextworkgroup, b.nextworkgroup, b.prepareqty, b.sidewarehouse, b.swsidewh, b.onlysidewh, b.limitforsidewh, b.preparecarrierforsidewh, b.cannot, b.dummycarrier, b.noqtimecarriertype from eqp_status a
                                             left join workgroup_set b on b.workgroup=a.workgroup 
                                             where 1=1 {0}", tmpCoditions);
             return strSQL;
@@ -1542,15 +1548,15 @@ left join carrier_transfer ct on ct.carrier_id=ca.carrier_id
             if (!_Workgroup.Equals(""))
                 tmpWhere = string.Format("where a.workgroup = '{0}'", _Workgroup);
 
-            string strSQL = string.Format(@"select a.workgroup, a.in_Erack, a.Out_Erack, case when b.eqpnum is null then 'None' else 'USE' end UseState from workgroup_set a
+            string strSQL = string.Format(@"select a.workgroup, a.stage, a.in_Erack, a.Out_Erack, case when b.eqpnum is null then 'None' else 'USE' end UseState from workgroup_set a
                                             left join (select count(equipid) as eqpnum, workgroup from eqp_port_set group by workgroup) b
                                             on b.workgroup = a.workgroup {0}", tmpWhere);
             return strSQL;
         }
         public string CreateWorkgroup(string _Workgroup)
         {
-            string strSQL = string.Format(@"insert into workgroup_set (workgroup, in_erack, out_erack, create_dt, modify_dt, lastmodify_dt)
-                                            values ('{0}', '', '', sysdate, sysdate, sysdate)", _Workgroup);
+            string strSQL = string.Format(@"insert into workgroup_set (workgroup, stage, in_erack, out_erack, create_dt, modify_dt, lastmodify_dt)
+                                            values ('{0}', 'DEFAULT', '', '', sysdate, sysdate, sysdate)", _Workgroup);
             return strSQL;
         }
         public string UpdateWorkgroupSet(string _Workgroup, string _InRack, string _OutRack)
@@ -1951,11 +1957,14 @@ left join carrier_transfer ct on ct.carrier_id=ca.carrier_id
             //select nvl(3-2/nullif(1-0,0),0) from dual;
             //nvl((g.qtime-g.MINALLOWABLETW)/nullif((g.MAXALLOWABLETW-g.MINALLOWABLETW),0), 0) as qtime1
 
+//20241028 eotd(g.lot_id) change to g.enddate   //20241104 rollback
+
             strSQL = string.Format(@"select layer, g.carrier_id, g.command_type as carrierType, g.locate, g.lot_id, g.stg1, g.stg2, g.stage, g.in_erack, g.workgroup, g.priority as lot_priority, g.lot_age, g.qtime, g.minallowabletw, g.maxallowabletw, round(nvl((g.qtime-g.MINALLOWABLETW)/nullif((g.MAXALLOWABLETW-g.MINALLOWABLETW),0), 0), 3) as qtime1,
 case when g.maxallowabletw-g.qtime<=3 then 'Y' else 'N' end gonow from (
 select distinct substr(c1.stage, 0, 3) as layer, a.carrier_id, a.locate, b1.command_type, b.lot_id, e.stage stg1,e1.stage stg2, case when nvl(e.stage, 'NA') <> 'NA' then e.stage else e1.stage end stage, 
 case when nvl(e.stage, 'NA') <> 'NA' then e.in_erack else e1.in_erack end in_erack, d.workgroup,
-c1.priority, c1.lot_age, nvl(c1.qtime, 0) as qtime, nvl(f.MINALLOWABLETW, 0) MINALLOWABLETW, nvl(f.MAXALLOWABLETW, 0 ) MAXALLOWABLETW 
+c1.priority, c1.lot_age, nvl(c1.qtime, 0) as qtime, nvl(f.MINALLOWABLETW, 0) MINALLOWABLETW, nvl(f.MAXALLOWABLETW, 0 ) MAXALLOWABLETW, 
+c1.enddate, c1.sch_seq 
 from carrier_transfer a
 left join carrier_lot_associate b on b.carrier_id=a.carrier_id
 left join carrier_type_set b1 on b1.type_key=a.type_key
@@ -1971,8 +1980,9 @@ and a.location_type in ('ERACK','STK')
 and a.reserve=0 and a.state not in ('HOLD', 'SYSHOLD')
 and c.lotid is not null and c.state in ('WAIT')
 and (e.in_erack is not null or e1.in_erack is not null)) g
-order by layer desc, eotd(g.lot_id) asc, gonow desc, qtime1 desc, priority desc, lot_age desc", _lotTable);
+order by layer desc, eotd(g.lot_id) asc, gonow desc, qtime1 desc, priority desc, g.sch_seq asc", _lotTable);
 
+            //20241104 pretransfer condition lot_age desc change to sch_seq asc
             return strSQL;
         }
         public string QueryPreTransferListForUat(string _lotTable)
@@ -1982,11 +1992,14 @@ order by layer desc, eotd(g.lot_id) asc, gonow desc, qtime1 desc, priority desc,
             //rtd_ewlb_ew_mds_tw_rule_tbl_vw , Q-Time table
             //order condition: gonow desc, qtime1 desc, priority asc, lot_age desc
 
+            //20241028 eotd(g.lot_id) change to g.enddate   //20241104 rollback
+
             strSQL = string.Format(@"select layer, g.carrier_id, g.command_type as carrierType, g.locate, g.lot_id, g.stg1, g.stg2, g.stage, g.in_erack, g.workgroup, g.priority as lot_priority, g.lot_age, g.qtime, g.minallowabletw, g.maxallowabletw, round(nvl((g.qtime-g.MINALLOWABLETW)/nullif((g.MAXALLOWABLETW-g.MINALLOWABLETW),0), 0), 3) as qtime1,
 case when g.maxallowabletw-g.qtime<=3 then 'Y' else 'N' end gonow from (
 select distinct substr(c1.stage, 0, 3) as layer, a.carrier_id, a.locate, b1.command_type, b.lot_id, e.stage stg1,e1.stage stg2, case when nvl(e.stage, 'NA') <> 'NA' then e.stage else e1.stage end stage, 
 case when nvl(e.stage, 'NA') <> 'NA' then e.in_erack else e1.in_erack end in_erack, d.workgroup,
-c1.priority, c1.lot_age, nvl(c1.qtime, 0) as qtime, nvl(f.MINALLOWABLETW, 0) MINALLOWABLETW, nvl(f.MAXALLOWABLETW, 0 ) MAXALLOWABLETW 
+c1.priority, c1.lot_age, nvl(c1.qtime, 0) as qtime, nvl(f.MINALLOWABLETW, 0) MINALLOWABLETW, nvl(f.MAXALLOWABLETW, 0 ) MAXALLOWABLETW, 
+c1.enddate, c1.sch_seq 
 from carrier_transfer a
 left join carrier_lot_associate b on b.carrier_id=a.carrier_id
 left join carrier_type_set b1 on b1.type_key=a.type_key
@@ -2002,7 +2015,9 @@ and a.location_type='ERACK'
 and a.reserve=0 and a.state not in ('HOLD','SYSHOLD')
 and c.lotid is not null and c.state in ('WAIT')
 and e.in_erack is not null) g
-order by layer desc, eotd(g.lot_id) asc, gonow desc, qtime1 desc, priority desc, lot_age desc", _lotTable);
+order by layer desc, eotd(g.lot_id) asc, gonow desc, qtime1 desc, priority desc, g.sch_seq asc", _lotTable);
+
+            //20241104 pretransfer condition lot_age desc change to sch_seq asc
 
             return strSQL;
         }
@@ -2142,6 +2157,8 @@ order by layer desc, eotd(g.lot_id) asc, gonow desc, qtime1 desc, priority desc,
         public string QueryLotInfoByCarrier(string _carrierid)
         {
             string strSQL = "";
+
+            //20241028 eotd(b.lotid) change to b.enddate    //20241104 roll back
 
 #if DEBUG
             strSQL = string.Format(@"select a.carrier_id, a.lot_id, b.islock, eotd, b.custdevice from carrier_lot_associate a 
@@ -2807,6 +2824,8 @@ case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime 
                     }
                 }
 
+                //20241028 eotd(carr.lot_id) change to carr.enddate ' 20241104 rollback 
+
 #if DEBUG
                 _adsTable = "rtd_ewlb_ads_vw";
                 _qTimeTable = "rtd_ewlb_ew_mds_tw_rule_tbl_vw";
@@ -2816,7 +2835,7 @@ case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime 
 round(nvl((carr.qtime-carr.minallowabletw)/nullif((carr.maxallowabletw-carr.minallowabletw), 0), 0), 3) as qTime1,
 case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime < 3 then 'Y' else 'N' end else 'N' end as gonow, carr.custdevice, carr.lot_age, carr.lot_priority from 
 (select substr(d.stage, 0, 3) as layer, a.carrier_id, a.carrier_state, a.locate, a.portno, a.enable, a.location_type,a.metal_ring, c.quantity, case when d.total_qty is null then 0 else d.total_qty end as total_qty,
-                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(d.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, d.custdevice, d.lot_age, case when d.priority > 70 then d.priority else 0 end as lot_priority from CARRIER_TRANSFER a
+                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(d.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, d.custdevice, d.lot_age, case when d.priority > 70 then d.priority else 0 end as lot_priority, d.enddate from CARRIER_TRANSFER a
                                 left join CARRIER_TYPE_SET b on b.type_key = a.type_key
                                 left join CARRIER_LOT_ASSOCIATE c on c.carrier_id = a.carrier_id
                                 left join LOT_INFO d on d.lotid=c.lot_id
@@ -2833,7 +2852,7 @@ strSQL = string.Format(@"select layer, carr.carrier_id, carr.carrier_state, carr
 round(nvl((carr.qtime-carr.minallowabletw)/nullif((carr.maxallowabletw-carr.minallowabletw), 0), 0), 3) as qTime1,
 case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime < 3 then 'Y' else 'N' end else 'N' end as gonow, carr.wpriority, carr.custdevice, carr.lot_age, carr.lot_priority from 
 (select substr(d.stage, 0, 3) as layer, a.carrier_id, a.carrier_state, a.locate, a.portno, a.enable, a.location_type,a.metal_ring, c.quantity, case when d.total_qty is null then 0 else d.total_qty end as total_qty,
-                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(d.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, nvl(g.priority, 20) as wPriority, d.custdevice, d.lot_age, case when d.priority > 70 then d.priority else 0 end as lot_priority from CARRIER_TRANSFER a
+                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(d.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, nvl(g.priority, 20) as wPriority, d.custdevice, d.lot_age, case when d.priority > 70 then d.priority else 0 end as lot_priority, d.enddate from CARRIER_TRANSFER a
                                 left join CARRIER_TYPE_SET b on b.type_key = a.type_key
                                 left join CARRIER_LOT_ASSOCIATE c on c.carrier_id = a.carrier_id
                                 left join LOT_INFO d on d.lotid=c.lot_id
@@ -2851,7 +2870,7 @@ strSQL = string.Format(@"select layer, carr.carrier_id, carr.carrier_state, carr
 round(nvl((carr.qtime-carr.minallowabletw)/nullif((carr.maxallowabletw-carr.minallowabletw), 0), 0), 3) as qTime1,
 case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime < 3 then 'Y' else 'N' end else 'N' end as gonow, carr.custdevice, carr.lot_age, carr.lot_priority from 
 (select substr(d.stage, 0, 3) as layer, a.carrier_id, a.carrier_state, a.locate, a.portno, a.enable, a.location_type,a.metal_ring, c.quantity, case when d.total_qty is null then 0 else d.total_qty end as total_qty,
-                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(d.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, d.custdevice, d.lot_age, case when d.priority > 70 then d.priority else 0 end as lot_priority from CARRIER_TRANSFER a
+                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(d.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, d.custdevice, d.lot_age, case when d.priority > 70 then d.priority else 0 end as lot_priority, d.enddate from CARRIER_TRANSFER a
                                 left join CARRIER_TYPE_SET b on b.type_key = a.type_key
                                 left join CARRIER_LOT_ASSOCIATE c on c.carrier_id = a.carrier_id
                                 left join LOT_INFO d on d.lotid=c.lot_id
@@ -3475,7 +3494,7 @@ case when nvl(e.SideWarehouse, 'NA') <> 'NA' then e.SideWarehouse else e1.SideWa
 case when nvl(e.preparecarrierForSideWH, 0) <> 0 then e.preparecarrierForSideWH else e1.preparecarrierForSideWH end preparecarrierForSideWH,
 c1.priority, c1.lot_age, nvl(c1.qtime, 0) as qtime, nvl(f.MINALLOWABLETW, 0) MINALLOWABLETW, nvl(f.MAXALLOWABLETW, 0 ) MAXALLOWABLETW,
 e1.priority as wgpriority, 
-e1.isFurnace 
+e1.isFurnace, c1.enddate, c1.sch_seq 
 from carrier_transfer a
 left join carrier_lot_associate b on b.carrier_id=a.carrier_id
 left join carrier_type_set b1 on b1.type_key=a.type_key
@@ -3496,7 +3515,9 @@ and (e.SideWarehouse is not null or e1.SideWarehouse is not null)) g
 where g.locate not in (select ""erackID"" from rack where ""erackID"" = g.SideWarehouse
 union select ""erackID"" from rack where ""groupID"" = g.SideWarehouse
 union select ""erackID"" from rack where inStr(sector, g.SideWarehouse)>0)
-order by g.workgroup, g.wgpriority, layer desc, eotd(g.lot_id) asc, gonow desc, qtime1 desc, priority desc, lot_age desc", _lotTable);
+order by g.workgroup, g.wgpriority, layer desc, eotd(g.lot_id) asc, gonow desc, qtime1 desc, priority desc, g.sch_seq asc", _lotTable);
+//20241028 eotd(g.lot_id) change to g.enddate //20241104 roll back
+//20241104 pretransfer condition lot_age desc change to sch_seq asc
 
             return strSQL;
         }
@@ -3517,7 +3538,8 @@ select distinct substr(c1.stage, 0, 3) as layer, a.carrier_id, a.locate, b1.comm
 case when nvl(e.stage, 'NA') <> 'NA' then e.in_erack else e1.in_erack end in_erack, d.workgroup,
 case when nvl(e.SideWarehouse, 'NA') <> 'NA' then e.SideWarehouse else e1.SideWarehouse end SideWarehouse,
 case when nvl(e.preparecarrierForSideWH, 0) <> 0 then e.preparecarrierForSideWH else e1.preparecarrierForSideWH end preparecarrierForSideWH,
-c1.priority, c1.lot_age, nvl(c1.qtime, 0) as qtime, nvl(f.MINALLOWABLETW, 0) MINALLOWABLETW, nvl(f.MAXALLOWABLETW, 0 ) MAXALLOWABLETW 
+c1.priority, c1.lot_age, nvl(c1.qtime, 0) as qtime, nvl(f.MINALLOWABLETW, 0) MINALLOWABLETW, nvl(f.MAXALLOWABLETW, 0 ) MAXALLOWABLETW, 
+c1.enddate, c1.sch_seq 
 from carrier_transfer a
 left join carrier_lot_associate b on b.carrier_id=a.carrier_id
 left join carrier_type_set b1 on b1.type_key=a.type_key
@@ -3536,7 +3558,9 @@ and (e.swsideWH=1 or e1.swsideWH=1) and (e.SideWarehouse is not null or e1.SideW
 where g.locate not in (select ""erackID"" from rack where ""erackID"" = g.SideWarehouse
 union select ""erackID"" from rack where ""groupID"" = g.SideWarehouse
 union select ""erackID"" from rack where inStr(sector, g.SideWarehouse)>0)
-order by layer desc, eotd(g.lot_id) asc, gonow desc, qtime1 desc, priority desc, lot_age desc", _lotTable);
+order by layer desc, eotd(g.lot_id) asc, gonow desc, qtime1 desc, priority desc, g.sch_seq asc", _lotTable);
+            ///20241028 eotd(g.lot_id) change to g.enddate  //20241104 rollback
+            //20241104 pretransfer condition lot_age desc change to sch_seq asc
 
             return strSQL;
         }
@@ -4097,7 +4121,7 @@ where workgroup='{1}' and stage='{2}'", _newStage, _workgroup, _stage);
         public string QueryMidways(QueryMidways _cond)
         {
             string strSQL = "";
-            string tmpSQL = "select * from rtd_midways";
+            string tmpSQL = "select a.*, 'DEST' as destination from rtd_midways a";
             string strWhere = "";
             string tmpWhere = "";
 
@@ -4175,7 +4199,35 @@ values ('{0}','{1}','{2}','{3}',sysdate, 0, '{4}')";
 
             if (!_idx.Equals(""))
             {
-                strWhere = string.Format("where idx = '{0}'", _idx);
+                if(_idx.IndexOf(',') >=0)
+                    strWhere = string.Format("where idx in ({0})", _idx);
+                else
+                    strWhere = string.Format("where idx = {0}", _idx);
+
+                strSet = string.Format("set {0}, enabled=0, modify_dt=sysdate", _del.Equals(true) ? "delmark=1" : "delmark=0");
+
+                tmpSQL = @"update rtd_midways {0} {1}";
+
+                strSQL = string.Format(tmpSQL, strSet, strWhere);
+            }
+
+            return strSQL;
+        }
+        public string ResetMidways(string _workgroup, string _stage, bool _del)
+        {
+            string strSQL = "";
+            string tmpSQL = "";
+            string strSet = "";
+            string strWhere = "";
+
+            if (!_workgroup.Equals(""))
+            {
+                strWhere = string.Format("where workgroup = '{0}'", _workgroup);
+
+                if (!_stage.Equals(""))
+                {
+                    strWhere = string.Format("{0} and stage = '{1}'", strWhere, _stage);
+                }
 
                 strSet = string.Format("set {0}, enabled=0, modify_dt=sysdate", _del.Equals(true) ? "delmark=1" : "delmark=0");
 
@@ -4217,11 +4269,11 @@ values ('{0}','{1}','{2}','{3}',sysdate, 0, '{4}')";
         public string QueryStageControlList(StageControlList _cond)
         {
             string strSQL = "";
-            string tmpSQL = "select * from eqp_port_detail";
+            string tmpSQL = "select a.*, b.workgroup, 'DEST' as destination from eqp_port_detail a left join eqp_status b on b.equipid=a.equipid ";
             string tmpWhere = "";
 
             if (!_cond.EQUIPID.Equals(""))
-                tmpWhere = string.Format("where EQUIPID='{0}' and delmark = 0", _cond.EQUIPID);
+                tmpWhere = string.Format("where a.EQUIPID='{0}' and a.delmark = 0", _cond.EQUIPID);
             else
             {
                 strSQL = tmpSQL;
@@ -4407,6 +4459,135 @@ where a.carrier_state='ONLINE' and lotid is not null";
             string strSQL = "";
 
             strSQL = string.Format("select eotd('{0}') as eotd from dual", _lotid);
+
+            return strSQL;
+        }
+        public string GetDataFromTableByLot(string _table, string _colname, string _lotid)
+        {
+            string strSQL;
+            string strWhere = "";
+
+            if(!_lotid.Equals(""))
+            {
+                strWhere = string.Format("where {0}='{1}'", _colname, _lotid);
+            }
+
+            strSQL = string.Format("select * from {0} {1}", _table, strWhere);
+
+            return strSQL;
+        }
+        public string UpdateTurnRatioToLotInfo(string _lotid, string _turnratio)
+        {
+            //update lot_info set qtime = 0.222 where lotid =
+            string strSet = "set {0}";
+            string tmpSet = "";
+            string strWhere = "";
+            string strSQL = "";
+
+            if (!_lotid.Equals(""))
+                strWhere = string.Format(@"where lotid = '{0}'", _lotid);
+            else
+                return strSQL;
+
+            if (!_turnratio.Equals(""))
+                tmpSet = string.Format(@"turnratio2 = '{0}'", _turnratio);
+
+            if (!tmpSet.Equals(""))
+                strSet = string.Format(@"set {0}", tmpSet);
+            else
+                return strSQL;
+
+            strSQL = string.Format(@"update lot_info {0} {1}", strSet, strWhere);
+
+            return strSQL;
+        }
+        public string ResetSchseqByModel(string _seq, string _cdt)
+        {
+            //update lot_info set qtime = 0.222 where lotid =
+            string strSet = "set {0}";
+            string tmpSet = "";
+            string strWhere = "";
+            string strSQL = "";
+
+            if (!_cdt.Equals(""))
+            {
+                string tmpCdt = "";
+                string[] tmpStr = _cdt.Split(',');
+                switch (tmpStr[0].ToString())
+                {
+                    case "1":
+                        tmpCdt = string.Format("sch_seq='{0}'", _seq);
+                        break;
+                    case "2":
+                        tmpCdt = string.Format("sch_seq='{0}', stage='{1}'", _seq, tmpStr[1].ToString());
+                        break;
+                    case "0":
+                    default:
+                        tmpCdt = string.Format("sch_seq='{0}', stage='{1}', customername='{2}'", _seq, tmpStr[1].ToString(), tmpStr[2].ToString());
+                        break;
+                }
+                strWhere = string.Format(@"where {0}", tmpCdt);
+            }
+            else
+                return strSQL;
+
+            if (!strWhere.Equals(""))
+                strSet = string.Format(@"set sch_seq=0");
+            else
+                return strSQL;
+
+            strSQL = string.Format(@"update lot_info {0} {1}", strSet, strWhere);
+
+            return strSQL;
+        }
+        public string SelectEquipPortInfo2()
+        {
+            string strSQL = "";
+#if DEBUG
+            strSQL = @"select * from (
+                        select distinct a.equipid, b.port_seq, b.port_id, 'EQP' as deviceType from EQP_STATUS a
+                        left join EQP_PORT_SET b on b.equipid = a.equipid where b.port_seq is not null
+                        ) order by equipid, port_seq";
+#else
+            strSQL = @"select * from (
+                        select distinct a.equipid, b.port_seq, b.port_id, 'EQP' as deviceType from EQP_STATUS a
+                        left join EQP_PORT_SET b on b.equipid = a.equipid where b.port_seq is not null
+                        ) order by equipid, port_seq";
+#endif
+            return strSQL;
+        }
+        public string QueryERackInfo2()
+        {
+            string strSQL = @"select a.*, 'ERACK' as deviceType from rack a where status = 'up'";
+            return strSQL;
+        }
+        public string UpdatePriorityForWorkgroupSet(string _Workgroup, string _stage, int _priority)
+        {
+            string tmpSet = "";
+            string strSQL = "";
+
+            if (!_Workgroup.Equals(""))
+            {
+                strSQL = string.Format("where workgroup = '{0}'", _Workgroup);
+
+                if (!_stage.Equals(""))
+                {
+                    strSQL = string.Format("where workgroup = '{0}' and stage = '{1}'", _Workgroup, _stage);
+                }
+                else
+                {
+                    strSQL = string.Format("where workgroup = '{0}'", _Workgroup);
+                }
+
+                if (_priority > 0)
+                    tmpSet = string.Format("{0}", tmpSet.Equals("") ? string.Format("set priority = '{0}'", _priority) : "0");
+
+                if (!tmpSet.Equals(""))
+                    tmpSet = string.Format("{0},lastModify_dt = {1}", tmpSet, "sysdate");
+
+                strSQL = string.Format(@"update workgroup_set {0} {1}
+                                            ", tmpSet, strSQL);
+            }
 
             return strSQL;
         }

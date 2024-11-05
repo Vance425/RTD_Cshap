@@ -19,7 +19,7 @@ namespace RTDWebAPI.Interface
         bool CheckLotInfo(DBTool _dbTool, IConfiguration _configuration, ILogger _logger);
         bool SyncEquipmentData(DBTool _dbTool, IConfiguration _configuration, ILogger _logger);
         bool CheckLotCarrierAssociate(DBTool _dbTool, ILogger _logger);
-        bool CheckLotEquipmentAssociate(DBTool _dbTool, ConcurrentQueue<EventQueue> _evtQueue);
+        bool CheckLotEquipmentAssociate(DBTool _dbTool, IConfiguration _configuration, ILogger _logger, ConcurrentQueue<EventQueue> _evtQueue);
         bool UpdateEquipmentAssociateToReady(DBTool _dbTool, ConcurrentQueue<EventQueue> _evtQueue);
         bool SentDispatchCommandtoMCS(DBTool _dbTool, IConfiguration _configuration, ILogger _logger, List<string> ListCmds);
         APIResult SentCommandtoMCS(IConfiguration _configuration, ILogger _logger, List<string> agrs);

@@ -101,6 +101,7 @@ namespace RTDWebAPI.APP
                             if (!evtLogicService.IsAlive)
                             {
                                 evtLogicService = new EventLogicService();
+                                
                                 evtLogicService._logger = _logger;
                                 evtLogicService._eventQueue = _eventQueue;
                                 evtLogicService._threadConntroll = _threadConntroll;

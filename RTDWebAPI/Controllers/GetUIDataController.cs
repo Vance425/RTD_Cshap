@@ -733,7 +733,7 @@ namespace RTDWebAPI.Controllers
                 dr = dt.Select();
                 if (dr.Length <= 0)
                 {
-
+                    
                 }
                 else
                 {
@@ -3150,5 +3150,121 @@ namespace RTDWebAPI.Controllers
             public string CarrierType { get; set; }
             public string UserID { get; set; }
         }
+
+        [HttpPost("GetDeviceList")]
+        public ActionResult<String> GetDeviceList()
+        {
+            string funcName = "GetDeviceList";
+            string tmpMsg = "";
+            string strResult = "";
+            DataTable dt = null;
+            DataRow[] dr = null;
+            string sql = "";
+            List<DeviceList> _lstDeviceList = new List<DeviceList>();
+            DeviceList _deviceList = new DeviceList();
+            DeviceSlotList _deviceSlotList = new DeviceSlotList();
+            IBaseDataService _BaseDataService = new BaseDataService();
+
+            try
+            {
+                //// 查詢資料
+                dt = _dbTool.GetDataTable(_BaseDataService.SelectEquipPortInfo2());
+                if (dt.Rows.Count <= 0)
+                {
+
+                }
+                else
+                {
+                    string eqpid = "";
+                    _deviceList = new DeviceList();
+                    _deviceSlotList = new DeviceSlotList();
+                    foreach (DataRow dr2 in dt.Rows)
+                    {
+                        eqpid = dr2["equipid"].ToString();
+                        _deviceList.DeviceType = dr2["deviceType"].ToString().Equals("") ? "Unknow" : dr2["deviceType"].ToString();
+
+                        if (_deviceList.DeviceID is null)
+                            _deviceList.DeviceID = dr2["equipid"].ToString();
+                        else if (!_deviceList.DeviceID.Equals(eqpid))
+                        {
+                            _lstDeviceList.Add(_deviceList);
+                            _deviceList = new DeviceList();
+                            _deviceList.DeviceID = dr2["equipid"].ToString();
+                            _deviceList.DeviceType = dr2["deviceType"].ToString().Equals("") ? "Unknow" : dr2["deviceType"].ToString();
+                        }
+                        _deviceSlotList = new DeviceSlotList();
+                        _deviceSlotList.slotNo = int.Parse(dr2["port_seq"].ToString().Equals("") ? "0" : dr2["port_seq"].ToString());
+                        
+                        if (_deviceList.PortInfoList is null)
+                            _deviceList.PortInfoList = new List<DeviceSlotList>();
+                        _deviceList.PortInfoList.Add(_deviceSlotList);
+                    }
+
+                }
+
+                //// 查詢儲存貨架資料
+                dt = _dbTool.GetDataTable(_BaseDataService.QueryERackInfo2());
+                if (dt.Rows.Count <= 0)
+                {
+
+                }
+                else
+                {
+                    string rackid = "";
+                    int iRows = 0;
+
+                    foreach (DataRow dr2 in dt.Rows)
+                    {
+                        rackid = dr2["erackID"].ToString();
+                        iRows = int.Parse(dr2["LEN"].ToString());
+
+                        _deviceList = new DeviceList();
+                        _deviceList.DeviceID = rackid;
+                        _deviceSlotList = new DeviceSlotList();
+                        for (int i = 1; i <= iRows; i++)
+                        {
+                            if (_deviceList.DeviceID is null)
+                                _deviceList.DeviceID = rackid;
+                            else if (!_deviceList.DeviceID.Equals(rackid))
+                            {
+                                _lstDeviceList.Add(_deviceList);
+                                _deviceList = new DeviceList();
+                                _deviceList.DeviceID = rackid;
+                                _deviceList.DeviceType = dr2["deviceType"].ToString().Equals("") ? "Unknow" : dr2["deviceType"].ToString();
+                            }
+                            _deviceSlotList = new DeviceSlotList();
+                            _deviceSlotList.slotNo = i;
+                            
+                            if (_deviceList.PortInfoList is null)
+                                _deviceList.PortInfoList = new List<DeviceSlotList>();
+                            _deviceList.PortInfoList.Add(_deviceSlotList);
+                        }
+                        if (_lstDeviceList is not null)
+                            _lstDeviceList.Add(_deviceList);
+                        else
+                        {
+
+                        }
+                    }
+                }
+
+                strResult = JsonConvert.SerializeObject(_lstDeviceList);
+            }
+            catch (Exception ex)
+            {
+                return strResult;
+            }
+            finally
+            {
+                //_logger.LogInformation(string.Format("Info :{0}", value.CarrierID));
+                if (dt is not null)
+                {
+                    dt.Clear(); dt.Dispose(); dt = null; dr = null;
+                }
+            }
+
+            return strResult;
+        }
+
     }
 }

@@ -69,6 +69,10 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Commons\Method\HttpClientCallJWTAPI.sln" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Autofac" Version="6.3.0" />
     <PackageReference Include="Grpc.AspNetCore" Version="2.40.0" />
     <PackageReference Include="Microsoft.AspNet.WebApi.Client" Version="5.2.9" />
