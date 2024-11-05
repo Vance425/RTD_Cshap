@@ -2360,7 +2360,7 @@ namespace RTDWebAPI.Controllers
                                     foreach (string tmpParam in _lstParams)
                                     {
 
-                                        if (!dr[0][_paramsName].ToString().Equals(""))
+                                        if (!dr[0][_paramsName].Equals(null))
                                         {
                                             sql = _BaseDataService.SetParameterWorkgroupSetByWorkgroupStage(value.Workgroup, value.Stage, value.Parameter, value.IsNumber.Equals(true) ? int.Parse(tmpParam) : tmpParam);
                                             _dbTool.SQLExec(sql, out tmpMsg, true);

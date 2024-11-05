@@ -791,16 +791,21 @@ namespace RTDWebAPI.Service
 
             return bResult;
         }
-        public bool CheckLotEquipmentAssociate(DBTool _dbTool, ConcurrentQueue<EventQueue> _evtQueue)
+        public bool CheckLotEquipmentAssociate(DBTool _dbTool, IConfiguration _configuration, ILogger _logger, ConcurrentQueue<EventQueue> _evtQueue)
         {
 
             DataTable dt = null;
+            DataTable dtTemp = null;
+            DataTable dtCopy = null;
             string sql = "";
             string tmpMsg = "";
             bool bResult = false;
             bool bReflush = false;
             //ConcurrentQueue<EventQueue>  evtQueue = new ConcurrentQueue<EventQueue>();
             bool byStage = true;
+            DateTime _startTime;
+            DateTime _stopTime;
+            TimeSpan _tSpan;
 
             try
             {
@@ -851,54 +856,123 @@ namespace RTDWebAPI.Service
                 string sCustomer = "";
                 string sLastStage = "";
                 int isLock = 0;
+                string tmpTable;
+                bool _change = false;
+                DataRow[] drTemp;
 
                 if (dt.Rows.Count > 0)
                 {
-                    string sql2 = "";
-                    string sqlMsg = "";
-                    sCustomer = dt.Rows[0]["CustomerName"].ToString();
-                    sLastStage = dt.Rows[0]["Stage"].ToString();
-
-                    if (GetLockState(_dbTool))
-                        return bResult;
-
+                    _startTime = DateTime.Now;
                     foreach (DataRow dr2 in dt.Rows)
                     {
-                        string CarrierID = GetCarrierByLotID(_dbTool, dr2["lotid"].ToString());
+                        try {
 
-                        EventQueue _evtQ = new EventQueue();
-                        _evtQ.EventName = "LotEquipmentAssociateUpdate";
-                        NormalTransferModel _transferModel = new NormalTransferModel();
+                            //Sync ads lot
+#if DEBUG
+                            tmpTable = _configuration["SyncExtenalData:AdsInfo:Table:Debug"];
+#else
+                        tmpTable = _configuration["SyncExtenalData:AdsInfo:Table:Prod"];
+#endif
 
-                        if (dr2["Rtd_State"].ToString().Equals("INIT"))
-                        {
-                            sql2 = string.Format(_BaseDataService.UpdateLotInfoSchSeqByLotid(dr2["lotid"].ToString(), 0));
-                            _dbTool.SQLExec(sql2, out sqlMsg, true);
-                            continue;
-                        }
+                            sql = string.Format(_BaseDataService.GetDataFromTableByLot(tmpTable, "lotid", dr2["lotid"].ToString()));
+                            dtTemp = _dbTool.GetDataTable(sql);
 
-                        if (!dr2["Stage"].ToString().Equals(""))
-                        {
-
-                            if (bReflush)
+                            if (dtTemp.Rows.Count > 0)
                             {
-                                if (byStage)
+                                try {
+                                    dr2["adslot"] = dtTemp.Rows[0]["lotid"].ToString().Equals("") ? "Null" : dtTemp.Rows[0]["lotid"].ToString();
+                                    dr2["stageage"] = dtTemp.Rows[0]["stageage"].ToString();
+                                    dr2["qtime2"] = dtTemp.Rows[0]["qtime"].ToString();
+                                }
+                                catch(Exception ex) { }
+                            }
+                            else
+                                dr2["adslot"] = "Null";
+
+                            //Sync TurnRatio
+
+#if DEBUG
+                            tmpTable = "Lot_Info";
+#else
+                        tmpTable = _configuration["eRackDisplayInfo:Table"];
+#endif
+
+                            sql = string.Format(_BaseDataService.GetDataFromTableByLot(tmpTable, "lotid", dr2["lotid"].ToString()));
+                            dtTemp = _dbTool.GetDataTable(sql);
+
+                            if (dtTemp.Rows.Count > 0)
+                            {
+                                if (!dr2["turnratio2"].ToString().Equals(dtTemp.Rows[0]["turnratio"].ToString()))
                                 {
-                                    //以Stage 排列
-                                    if (dr2["Stage"].ToString().Equals(sLastStage))
-                                        iSchSeq += 1;
-                                    else
-                                    {
-                                        //換站點 Stage
-                                        iSchSeq = 1;
-                                        sLastStage = dr2["Stage"].ToString();
+                                    dr2["turnratio3"] = dtTemp.Rows[0]["turnratio"].ToString();
+                                    _dbTool.SQLExec(_BaseDataService.UpdateTurnRatioToLotInfo(dr2["lotid"].ToString(), dtTemp.Rows[0]["turnratio"].ToString()), out tmpMsg, true);
+                                    _change = true;
+                                }
+
+                                if (!dr2["enddate"].ToString().Equals(dtTemp.Rows[0]["eotd"].ToString()))
+                                {
+                                    if (!dtTemp.Rows[0]["eotd"].ToString().Equals("")){
+                                        dr2["eotd"] = dtTemp.Rows[0]["eotd"].ToString();
+                                        _dbTool.SQLExec(_BaseDataService.UpdateEotdToLotInfo(dr2["lotid"].ToString(), dtTemp.Rows[0]["eotd"].ToString()), out tmpMsg, true);
+                                        _change = true;
                                     }
                                 }
-                                else
+                            }
+                        }
+                        catch(Exception ex) { }
+                    }
+
+                    drTemp = dt.Select("adslot<>'Null'");
+                    if(drTemp.Length >0)
+                    {
+                        DataView dv = drTemp.CopyToDataTable().DefaultView;
+                        dv.Sort = "stage, rtd_state, priority desc , turnratio3 desc";
+                        dtCopy = dv.ToTable();
+                    }
+
+                    if (_change)
+                    {
+                        _stopTime = DateTime.Now;
+                        _tSpan = _stopTime.Subtract(_startTime);
+                        _logger.Info(string.Format("Reflush Schedule Sequence Timespan: [{0}], Start:[{1}] - End:[{2}]", _tSpan.Seconds, _startTime, _stopTime));
+                    }
+                }
+
+                if (dtCopy is not null)
+                {
+                    if (dtCopy.Rows.Count > 0)
+                    {
+                        string sql2 = "";
+                        string sqlMsg = "";
+                        sCustomer = dt.Rows[0]["CustomerName"].ToString();
+                        sLastStage = dt.Rows[0]["Stage"].ToString();
+
+                        if (GetLockState(_dbTool))
+                            return bResult;
+
+                        foreach (DataRow dr2 in dtCopy.Rows)
+                        {
+                            string CarrierID = GetCarrierByLotID(_dbTool, dr2["lotid"].ToString());
+
+                            EventQueue _evtQ = new EventQueue();
+                            _evtQ.EventName = "LotEquipmentAssociateUpdate";
+                            NormalTransferModel _transferModel = new NormalTransferModel();
+
+                            if (dr2["Rtd_State"].ToString().Equals("INIT"))
+                            {
+                                sql2 = string.Format(_BaseDataService.UpdateLotInfoSchSeqByLotid(dr2["lotid"].ToString(), 0));
+                                _dbTool.SQLExec(sql2, out sqlMsg, true);
+                                continue;
+                            }
+
+                            if (!dr2["Stage"].ToString().Equals(""))
+                            {
+
+                                if (bReflush)
                                 {
-                                    //加入Customer 排列
-                                    if (dr2["CustomerName"].ToString().Equals(sCustomer))
+                                    if (byStage)
                                     {
+                                        //以Stage 排列
                                         if (dr2["Stage"].ToString().Equals(sLastStage))
                                             iSchSeq += 1;
                                         else
@@ -910,63 +984,78 @@ namespace RTDWebAPI.Service
                                     }
                                     else
                                     {
-                                        //換客戶
-                                        iSchSeq = 1;
-                                        sCustomer = dr2["CustomerName"].ToString();
-                                        sLastStage = dr2["Stage"].ToString();
+                                        //加入Customer 排列
+                                        if (dr2["CustomerName"].ToString().Equals(sCustomer))
+                                        {
+                                            if (dr2["Stage"].ToString().Equals(sLastStage))
+                                                iSchSeq += 1;
+                                            else
+                                            {
+                                                //換站點 Stage
+                                                iSchSeq = 1;
+                                                sLastStage = dr2["Stage"].ToString();
+                                            }
+                                        }
+                                        else
+                                        {
+                                            //換客戶
+                                            iSchSeq = 1;
+                                            sCustomer = dr2["CustomerName"].ToString();
+                                            sLastStage = dr2["Stage"].ToString();
+                                        }
                                     }
+                                    //update lot_info sch_seq
+                                    sql2 = string.Format(_BaseDataService.UpdateLotInfoSchSeqByLotid(dr2["lotid"].ToString(), iSchSeq));
+                                    _dbTool.SQLExec(sql2, out sqlMsg, true);
                                 }
-                                //update lot_info sch_seq
-                                sql2 = string.Format(_BaseDataService.UpdateLotInfoSchSeqByLotid(dr2["lotid"].ToString(), iSchSeq));
-                                _dbTool.SQLExec(sql2, out sqlMsg, true);
                             }
-                        }
 
-                        bool bagain = false;
-                        if (dr2["EQUIP_ASSO"].ToString().Equals("N"))
-                        {
-                            if (TimerTool("minutes", dr2["lastmodify_dt"].ToString()) <= 1)
-                            { continue; }
-                            else
-                                bagain = true;
-
-                            if (bagain)
-                            {
-                                //EQUIP_ASSO 為 No, 立即執行檢查
-                                _transferModel.CarrierID = CarrierID;
-                                _transferModel.LotID = dr2["lotid"].ToString();
-                                _evtQ.EventObject = _transferModel;
-                                _evtQueue.Enqueue(_evtQ);
-                            }
-                        }
-                        else
-                        {
-                            //Equipment Assoicate 為 Yes, 每5分鐘再次檢查一次
-                            if (!dr2["EQUIPLIST"].ToString().Equals(""))
-                            {
-                                if (TimerTool("minutes", dr2["lastmodify_dt"].ToString()) <= 5)
-                                { continue; }
-                                else
-                                    bagain = true;
-                            }
-                            else
+                            bool bagain = false;
+                            if (dr2["EQUIP_ASSO"].ToString().Equals("N"))
                             {
                                 if (TimerTool("minutes", dr2["lastmodify_dt"].ToString()) <= 1)
                                 { continue; }
                                 else
                                     bagain = true;
-                            }
 
-                            if (bagain)
+                                if (bagain)
+                                {
+                                    //EQUIP_ASSO 為 No, 立即執行檢查
+                                    _transferModel.CarrierID = CarrierID;
+                                    _transferModel.LotID = dr2["lotid"].ToString();
+                                    _evtQ.EventObject = _transferModel;
+                                    _evtQueue.Enqueue(_evtQ);
+                                }
+                            }
+                            else
                             {
-                                _transferModel.CarrierID = CarrierID;
-                                _transferModel.LotID = dr2["lotid"].ToString();
-                                _evtQ.EventObject = _transferModel;
-                                _evtQueue.Enqueue(_evtQ);
+                                //Equipment Assoicate 為 Yes, 每5分鐘再次檢查一次
+                                if (!dr2["EQUIPLIST"].ToString().Equals(""))
+                                {
+                                    if (TimerTool("minutes", dr2["lastmodify_dt"].ToString()) <= 5)
+                                    { continue; }
+                                    else
+                                        bagain = true;
+                                }
+                                else
+                                {
+                                    if (TimerTool("minutes", dr2["lastmodify_dt"].ToString()) <= 1)
+                                    { continue; }
+                                    else
+                                        bagain = true;
+                                }
+
+                                if (bagain)
+                                {
+                                    _transferModel.CarrierID = CarrierID;
+                                    _transferModel.LotID = dr2["lotid"].ToString();
+                                    _evtQ.EventObject = _transferModel;
+                                    _evtQueue.Enqueue(_evtQ);
+                                }
                             }
                         }
-                    }
 
+                    }
                 }
 
                 bResult = true;
@@ -2337,7 +2426,7 @@ namespace RTDWebAPI.Service
 #if DEBUG
                 //_logger.Info(string.Format("Info:{0}", tmpMsg));
 #else
-#endif 
+#endif
 
                 if (resultMsg.status)
                 {
@@ -3015,7 +3104,7 @@ namespace RTDWebAPI.Service
                         _qTime_isProduct = true;
 
 
-#if DEBUG 
+#if DEBUG
                     _adsTable = configuration["SyncExtenalData:AdsInfo:Table:Debug"] is null ? "rtd_ewlb_ads_vw" : (configuration["SyncExtenalData:AdsInfo:Table:Debug"].ToString());
                     _qTimeTable = configuration["QTimeTable:Table:Debug"] is null ? "rtd_ewlb_qtime_vw" : configuration["QTimeTable:Table:Debug"].ToString();
 #else

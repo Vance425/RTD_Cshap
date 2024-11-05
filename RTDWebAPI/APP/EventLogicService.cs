@@ -3328,7 +3328,7 @@ namespace RTDWebAPI.APP
                                             }
 
                                             tmpMsg = "";
-                                            if (_functionService.CheckLotEquipmentAssociate(_dbTool, _eventQueue))
+                                            if (_functionService.CheckLotEquipmentAssociate(_dbTool, _configuration, _logger, _eventQueue))
                                             {
                                                 //Console.WriteLine(String.Format("Check Lot Info completed."));
                                             }

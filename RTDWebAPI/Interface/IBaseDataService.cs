@@ -330,5 +330,7 @@ namespace RTDWebAPI.Interface
         string CarrierTransferDTUpdate(string _carrierid, string _updateType);
         string QueryAllLotOnERack();
         string GetNewEotdByLot(string _lotid);
+        string GetDataFromTableByLot(string _table, string _colname, string _lotid);
+        string UpdateTurnRatioToLotInfo(string _lotid, string _turnratio);
     }
 }
