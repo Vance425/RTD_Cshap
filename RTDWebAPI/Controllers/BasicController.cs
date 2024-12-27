@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using NLog;
-using RTDWebAPI.Commons.Method.Database;
+using RTDDAC;
 using RTDWebAPI.Models;
 using System;
 using System.Collections.Concurrent;

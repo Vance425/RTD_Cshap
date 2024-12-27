@@ -1,6 +1,8 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using Commons.Method.Tools;
+using GyroLibrary;
+using Microsoft.Extensions.Configuration;
 using NLog;
-using RTDWebAPI.Commons.Method.Database;
+using RTDDAC;
 using RTDWebAPI.Commons.Method.Tools;
 using RTDWebAPI.Interface;
 using RTDWebAPI.Models;
@@ -13,6 +15,7 @@ using System.Data;
 using System.Globalization;
 using System.Linq;
 using System.Threading;
+using OracleSequence = Commons.Method.Tools.OracleSequence;
 
 namespace RTDWebAPI.APP
 {
@@ -208,12 +211,18 @@ namespace RTDWebAPI.APP
                 string _lastProcessTime = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss");
                 string _ThreadsWaitingTime = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss");
 
+                string _lastTriggerTime = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss");
+
                 while (true)
                 {
                     try
                     {
-                        //dbTool = new DBTool(tmpConnectString, tmpDatabase, tmpAutoDisconn, out msg);
+                        if (_payload.ContainsKey(CommonsConst.DBRequsetTurnon))
+                            _payload[CommonsConst.DBRequsetTurnon] = "True";
+                        else
+                            _payload.Add(CommonsConst.DBRequsetTurnon, "True");
 
+                        //dbTool = new DBTool(tmpConnectString, tmpDatabase, tmpAutoDisconn, out msg);
                         object obj = new object[]
                         {
                             _eventQueue,
@@ -222,11 +231,17 @@ namespace RTDWebAPI.APP
                             _logger,
                             _threadConntroll,
                             _functionService,
-                            _alarmDetail
+                            _alarmDetail,
+                            _payload
                         };
 
                         if (_listDBSession.Count > 0)
                             _dbTool = _listDBSession[0];
+
+                        if (!RTDSecurity.ShowSecurityKey(_dbTool).Equals((string)_payload[CommonsConst.RTDSecKey]))
+                        {
+                            continue;
+                        }
 
                         if (_serviceOn)
                         {
@@ -272,6 +287,27 @@ namespace RTDWebAPI.APP
                                 percentThread = 5;
                                 uidbAccessNum = 2;
                             }
+
+                            try {
+
+                                if (_functionService.TimerTool("seconds", _lastTriggerTime) > 60)
+                                {
+                                    _lastTriggerTime = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss");
+                                                                        
+                                    _sql = _BaseDataService.SelectRTDDefaultSet("DebugDBRequest");
+                                    dtTemp2 = _dbTool.GetDataTable(_sql);
+                                    if(dtTemp2.Rows.Count > 0)
+                                    {
+                                        if(!dtTemp2.Rows[0]["paramvalue"].ToString().Equals((string)_payload[CommonsConst.DBRequsetTurnon]))
+                                            _payload[CommonsConst.DBRequsetTurnon] = dtTemp2.Rows[0]["paramvalue"];
+                                    }
+                                    else
+                                    {
+                                        _payload[CommonsConst.DBRequsetTurnon] = "False";
+                                    }
+                                }
+                            }
+                            catch(Exception ex) { }
                         }
                         else
                         {
@@ -317,7 +353,14 @@ namespace RTDWebAPI.APP
                                     else
                                     {
                                         if (!_serviceOn)
+                                        {
                                             _serviceOn = true;
+
+                                            if (!RTDSecurity.ShowSecurityKey(_dbTool).Equals((string)_payload[CommonsConst.RTDSecKey]))
+                                            {
+                                                RTDSecurity.RegisterSecurityKey(_dbTool, (string)_payload[CommonsConst.RTDSecKey]);
+                                            }
+                                        }
                                     }
                                 }
                             }
@@ -344,7 +387,7 @@ namespace RTDWebAPI.APP
                         iCurrentllyUse = iMaxThreads - iworkerThreads;//最大線程數-當前可用線程數=當前使用線程數
                         iIdle = iMaxThreads - iCurrentllyUse;//最大線程數-可用線程數=idle線程數量
                         iCurrentUI = 0;
-                        Console.ReadKey();
+                        //Console.ReadKey();
 
 
                         if (iIdle < uidbAccessNum)
@@ -403,15 +446,12 @@ namespace RTDWebAPI.APP
 
                                 if (_lastStepTime.Equals("") || _functionService.TimerTool("seconds", _lastStepTime) >= 1)
                                 {
-
                                     waitCallback = new WaitCallback(scheduleProcess);
 
                                     ThreadPool.QueueUserWorkItem(waitCallback, obj);
 
-
                                     _lastStepTime = DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss");
                                 }
-
                             }
                             else
                             {
@@ -620,10 +660,13 @@ namespace RTDWebAPI.APP
 
             bool _NoConnect = true;
             int _retrytime = 0;
+            bool _DebugShowDatabaseAccess = false;
 
             IFunctionService _functionService = (FunctionService)obj[5];
             try
             {
+                tmpThreadNo = String.Format(tmpThreadNo, Thread.CurrentThread.ManagedThreadId);
+
 #if DEBUG
                 tmpMsg = string.Format("{2}, Function[{0}], Thread ID [{1}]", curPorcessName, Thread.CurrentThread.ManagedThreadId, DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss"));
                 Console.WriteLine(tmpMsg);
@@ -638,6 +681,13 @@ namespace RTDWebAPI.APP
                     _NoConnect = true;
                     while (_NoConnect)
                     {
+                        ///1.0.25.0204.1.0.0
+                        if (_DebugShowDatabaseAccess)
+                        {
+                            string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                            _logger.Debug(string.Format("{0} [{1}] send connect request to database [{2}][{3},{4},{5}]", dtNow, Thread.CurrentThread.ManagedThreadId, "ConnectRequest", lstDB[1], lstDB[2], lstDB[3]));
+                        }
+
                         _dbTool = new DBTool(lstDB[1], lstDB[2], lstDB[3], out tmpMsg);
                         if (!tmpMsg.Equals(""))
                         {
@@ -2255,10 +2305,13 @@ namespace RTDWebAPI.APP
             string currentThreadNo = "";
             string tmpThreadNo = "ThreadPoolNo_{0}";
             bool _DebugMode = true;
+            bool _DebugShowDatabaseAccess = false;
             //To Be
             object[] obj = (object[])parms;
             ConcurrentQueue<EventQueue> _eventQueue = (ConcurrentQueue<EventQueue>)obj[0];
             Dictionary<string, string> _threadControll = (Dictionary<string, string>)obj[4];
+            Dictionary<string, object> PayLoad = (Dictionary<string, object>)obj[7];
+            Dictionary<string, string> _threadOutControll = (Dictionary<string, string>) PayLoad[CommonsConst.ThreadsOutControll];
             IConfiguration _configuration = (IConfiguration)obj[2];
             DBTool _dbTool = null; // (DBTool)obj[1];
             Logger _logger = (Logger)obj[3];
@@ -2285,10 +2338,18 @@ namespace RTDWebAPI.APP
             int _retrytime = 0;
 
             IFunctionService _functionService = (FunctionService)obj[5];
+
+            if(((string) PayLoad[CommonsConst.DBRequsetTurnon]).Equals("True"))
+                _DebugShowDatabaseAccess = true;
+            else
+                _DebugShowDatabaseAccess = false;
+
             try
             {
+                tmpThreadNo = String.Format(tmpThreadNo, Thread.CurrentThread.ManagedThreadId);
+
 #if DEBUG
-                tmpMsg = string.Format("{2}, Function[{0}], Thread ID [{1}]", curPorcessName, Thread.CurrentThread.ManagedThreadId, DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss"));
+                tmpMsg = string.Format("{2}, Function[{0}], Thread ID [{1}]", curPorcessName, tmpThreadNo, DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss"));
                 Console.WriteLine(tmpMsg);
 #else
 #endif
@@ -2302,7 +2363,21 @@ namespace RTDWebAPI.APP
                     _NoConnect = true;
                     while (_NoConnect)
                     {
+                        ///1.0.25.0204.1.0.0
+                        if (_DebugShowDatabaseAccess)
+                        {
+                            string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                            _logger.Debug(string.Format("{0} [{1}] send connect request to database [{2}][{3},{4},{5}]", dtNow, Thread.CurrentThread.ManagedThreadId, "ConnectRequest", lstDB[1], lstDB[2], lstDB[3]));
+                        }
+
                         _dbTool = new DBTool(lstDB[1], lstDB[2], lstDB[3], out tmpMsg);
+
+                        ///1.0.25.0204.1.0.0
+                        if (_DebugShowDatabaseAccess)
+                        {
+                            string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                            _logger.Debug(string.Format("{0} connect state as [{1}][{2},{3},{4}]", dtNow, "ConnectResult", _dbTool.IsConnected, _dbTool.DBName, _dbTool.DBConnString));
+                        }
 
                         if (!tmpMsg.Equals(""))
                         {
@@ -2531,6 +2606,8 @@ namespace RTDWebAPI.APP
                         passTicket = false;
                         if (_threadControll.ContainsKey(scheduleName))
                         {
+                            string vlastOutDatetime = "";
+
                             try
                             {
                                 if (_DebugMode)
@@ -2577,6 +2654,24 @@ namespace RTDWebAPI.APP
                                         else
                                         {
                                             _threadControll.Add(timerID, vlastDatetime);
+                                        }
+
+                                        if (_threadOutControll.ContainsKey(timerID))
+                                        {
+                                            _threadOutControll.TryGetValue(timerID, out vlastOutDatetime);
+                                        }
+                                        else
+                                        {
+                                            _threadOutControll.Add(timerID, vlastOutDatetime);
+                                        }
+
+                                        TimeSpan ts1 = Convert.ToDateTime(vlastOutDatetime) - Convert.ToDateTime(vlastDatetime);
+                                        if (ts1.TotalSeconds < 0)
+                                        {
+                                            if (ts1.TotalSeconds > (iTimer01 * 3))
+                                                bDoLogic = true;
+                                            else
+                                                bDoLogic = false;
                                         }
                                     }
                                     catch (Exception ex)
@@ -2643,6 +2738,17 @@ namespace RTDWebAPI.APP
                                     _threadControll[scheduleName] = "false";
                                 }
                             }
+
+                            if (_threadOutControll.ContainsKey(timerID))
+                            {
+                                DateTime dtCurrent = DateTime.Now;
+                                vlastOutDatetime = dtCurrent.ToString("yyyy-MM-dd HH:mm:ss");
+
+                                lock (_threadOutControll)
+                                {
+                                    _threadOutControll[timerID] = vlastOutDatetime;
+                                }
+                            }
                         }
                         else
                         {
@@ -2659,6 +2765,8 @@ namespace RTDWebAPI.APP
                         passTicket = false;
                         if (_threadControll.ContainsKey(scheduleName))
                         {
+                            string vlastOutDatetime = "";
+
                             try
                             {
                                 if (_DebugMode)
@@ -2706,6 +2814,24 @@ namespace RTDWebAPI.APP
                                         else
                                         {
                                             _threadControll.Add(timerID, vlastDatetime);
+                                        }
+
+                                        if (_threadOutControll.ContainsKey(timerID))
+                                        {
+                                            _threadOutControll.TryGetValue(timerID, out vlastOutDatetime);
+                                        }
+                                        else
+                                        {
+                                            _threadOutControll.Add(timerID, vlastOutDatetime);
+                                        }
+
+                                        TimeSpan ts1 = Convert.ToDateTime(vlastOutDatetime) - Convert.ToDateTime(vlastDatetime);
+                                        if (ts1.TotalSeconds < 0)
+                                        {
+                                            if (ts1.TotalSeconds > (iTimer01 * 3))
+                                                bDoLogic = true;
+                                            else
+                                                bDoLogic = false;
                                         }
                                     }
                                     catch (Exception ex)
@@ -2869,6 +2995,17 @@ namespace RTDWebAPI.APP
                                     _threadControll[scheduleName] = "false";
                                 }
                             }
+
+                            if (_threadOutControll.ContainsKey(timerID))
+                            {
+                                DateTime dtCurrent = DateTime.Now;
+                                vlastOutDatetime = dtCurrent.ToString("yyyy-MM-dd HH:mm:ss");
+
+                                lock (_threadOutControll)
+                                {
+                                    _threadOutControll[timerID] = vlastOutDatetime;
+                                }
+                            }
                         }
                         else
                         {
@@ -2883,6 +3020,8 @@ namespace RTDWebAPI.APP
                         passTicket = false;
                         if (_threadControll.ContainsKey(scheduleName))
                         {
+                            string vlastOutDatetime = "";
+
                             try
                             {
                                 if (_DebugMode)
@@ -2929,6 +3068,24 @@ namespace RTDWebAPI.APP
                                         else
                                         {
                                             _threadControll.Add(timerID, vlastDatetime);
+                                        }
+
+                                        if (_threadOutControll.ContainsKey(timerID))
+                                        {
+                                            _threadOutControll.TryGetValue(timerID, out vlastOutDatetime);
+                                        }
+                                        else
+                                        {
+                                            _threadOutControll.Add(timerID, vlastOutDatetime);
+                                        }
+
+                                        TimeSpan ts1 = Convert.ToDateTime(vlastOutDatetime) - Convert.ToDateTime(vlastDatetime);
+                                        if (ts1.TotalSeconds < 0)
+                                        {
+                                            if (ts1.TotalSeconds > (iTimer01 * 3))
+                                                bDoLogic = true;
+                                            else
+                                                bDoLogic = false;
                                         }
                                     }
                                     catch (Exception ex)
@@ -3043,6 +3200,17 @@ namespace RTDWebAPI.APP
                                     _threadControll[scheduleName] = "false";
                                 }
                             }
+
+                            if (_threadOutControll.ContainsKey(timerID))
+                            {
+                                DateTime dtCurrent = DateTime.Now;
+                                vlastOutDatetime = dtCurrent.ToString("yyyy-MM-dd HH:mm:ss");
+
+                                lock (_threadOutControll)
+                                {
+                                    _threadOutControll[timerID] = vlastOutDatetime;
+                                }
+                            }
                         }
                         else
                         {
@@ -3057,6 +3225,8 @@ namespace RTDWebAPI.APP
                         passTicket = false;
                         if (_threadControll.ContainsKey(scheduleName))
                         {
+                            string vlastOutDatetime = "";
+
                             try
                             {
                                 if (_DebugMode)
@@ -3101,6 +3271,27 @@ namespace RTDWebAPI.APP
                                         {
                                             _threadControll.Add(timerID, vlastDatetime);
                                         }
+
+                                        if (_threadOutControll.ContainsKey(timerID))
+                                        {
+                                            _threadOutControll.TryGetValue(timerID, out vlastOutDatetime);
+                                        }
+                                        else
+                                        {
+                                            _threadOutControll.Add(timerID, vlastOutDatetime);
+                                        }
+
+                                        if(!vlastOutDatetime.Equals(""))
+                                        {
+                                            TimeSpan ts1 = Convert.ToDateTime(vlastOutDatetime) - Convert.ToDateTime(vlastDatetime);
+                                            if (ts1.TotalSeconds < 0)
+                                            {
+                                                if (ts1.TotalSeconds > (iTimer01 * 3))
+                                                    bDoLogic = true;
+                                                else
+                                                    bDoLogic = false;
+                                            }
+                                        }
                                     }
                                     catch (Exception ex)
                                     {
@@ -3115,6 +3306,12 @@ namespace RTDWebAPI.APP
 
                                         try
                                         {
+                                            ///1.0.25.0204.1.0.0
+                                            if (_DebugShowDatabaseAccess)
+                                            {
+                                                string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                                _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "SyncQtimeforOnlineLot"));
+                                            }
                                             //Sync Qtime from ads table
                                             if (_functionService.SyncQtimeforOnlineLot(_dbTool, _configuration))
                                             { }
@@ -3125,7 +3322,13 @@ namespace RTDWebAPI.APP
                                         try
                                         {
                                             tmpMsg = "";
- 
+
+                                            ///1.0.25.0204.1.0.0
+                                            if (_DebugShowDatabaseAccess)
+                                            {
+                                                string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                                _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "AutoSentInfoUpdate"));
+                                            }
                                             if (_functionService.AutoSentInfoUpdate(_dbTool, _configuration, _logger, out tmpMsg))
                                             {
                                                 //Console.
@@ -3147,6 +3350,13 @@ namespace RTDWebAPI.APP
                                         try
                                         {
                                             tmpMsg = "";
+
+                                            ///1.0.25.0204.1.0.0
+                                            if (_DebugShowDatabaseAccess)
+                                            {
+                                                string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                                _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "AutoAssignCarrierType"));
+                                            }
                                             if (_functionService.AutoAssignCarrierType(_dbTool, out tmpMsg))
                                             {
                                                 //Console.WriteLine(String.Format("Check Lot Info completed."));
@@ -3168,6 +3378,12 @@ namespace RTDWebAPI.APP
                                             tmpMsg = "";
                                             //SelectTableADSData
 
+                                            ///1.0.25.0204.1.0.0
+                                            if (_DebugShowDatabaseAccess)
+                                            {
+                                                string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                                _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "SelectTableADSData"));
+                                            }
                                             dt = _dbTool.GetDataTable(_BaseDataService.SelectTableADSData(_functionService.GetExtenalTables(_configuration, "SyncExtenalData", "AdsInfo")));
 
                                             if (dt.Rows.Count > 0)
@@ -3269,6 +3485,17 @@ namespace RTDWebAPI.APP
                                     _threadControll[scheduleName] = "false";
                                 }
                             }
+
+                            if (_threadOutControll.ContainsKey(timerID))
+                            {
+                                DateTime dtCurrent = DateTime.Now;
+                                vlastOutDatetime = dtCurrent.ToString("yyyy-MM-dd HH:mm:ss");
+
+                                lock (_threadOutControll)
+                                {
+                                    _threadOutControll[timerID] = vlastOutDatetime;
+                                }
+                            }
                         }
                         else
                         {
@@ -3283,6 +3510,8 @@ namespace RTDWebAPI.APP
                         passTicket = false;
                         if (_threadControll.ContainsKey(scheduleName))
                         {
+                            string vlastOutDatetime = "";
+
                             try
                             {
                                 if (_DebugMode)
@@ -3330,6 +3559,27 @@ namespace RTDWebAPI.APP
                                         {
                                             _threadControll.Add(timerID, vlastDatetime);
                                         }
+
+                                        if (_threadOutControll.ContainsKey(timerID))
+                                        {
+                                            _threadOutControll.TryGetValue(timerID, out vlastOutDatetime);
+                                        }
+                                        else
+                                        {
+                                            _threadOutControll.Add(timerID, vlastOutDatetime);
+                                        }
+
+                                        if (!vlastOutDatetime.Equals(""))
+                                        {
+                                            TimeSpan ts1 = Convert.ToDateTime(vlastOutDatetime) - Convert.ToDateTime(vlastDatetime);
+                                            if (ts1.TotalSeconds < 0)
+                                            {
+                                                if (ts1.TotalSeconds > (iTimer01 * 3))
+                                                    bDoLogic = true;
+                                                else
+                                                    bDoLogic = false;
+                                            }
+                                        }
                                     }
                                     catch (Exception ex)
                                     {
@@ -3354,6 +3604,11 @@ namespace RTDWebAPI.APP
                                                 //_logger.Debug(tmpMsg);
                                             }
 
+                                            if (_DebugShowDatabaseAccess)
+                                            {
+                                                string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                                _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "CheckLotEquipmentAssociate"));
+                                            }
                                             tmpMsg = "";
                                             if (_functionService.CheckLotEquipmentAssociate(_dbTool, _configuration, _logger, _eventQueue))
                                             {
@@ -3379,6 +3634,11 @@ namespace RTDWebAPI.APP
                                                 //_logger.Debug(tmpMsg);
                                             }
 
+                                            if (_DebugShowDatabaseAccess)
+                                            {
+                                                string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                                _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "AutoTriggerFurneceBatchin"));
+                                            }
                                             tmpMsg = "";
                                             if (_functionService.AutoTriggerFurneceBatchin(_dbTool, _configuration, _logger))
                                             {
@@ -3399,7 +3659,12 @@ namespace RTDWebAPI.APP
                                         //Auto unlock equipment port
                                         try
                                         {
-                                            
+                                            if (_DebugShowDatabaseAccess)
+                                            {
+                                                string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                                _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "AutounlockportWhenNoOrder"));
+                                            }
+
                                             tmpMsg = "";
                                             if (_functionService.AutounlockportWhenNoOrder(_dbTool, _configuration, _logger))
                                             {
@@ -3445,6 +3710,17 @@ namespace RTDWebAPI.APP
                                     _threadControll[scheduleName] = "false";
                                 }
                             }
+
+                            if (_threadOutControll.ContainsKey(timerID))
+                            {
+                                DateTime dtCurrent = DateTime.Now;
+                                vlastOutDatetime = dtCurrent.ToString("yyyy-MM-dd HH:mm:ss");
+
+                                lock (_threadOutControll)
+                                {
+                                    _threadOutControll[timerID] = vlastOutDatetime;
+                                }
+                            }
                         }
                         else
                         {
@@ -3460,6 +3736,8 @@ namespace RTDWebAPI.APP
                         passTicket = false;
                         if (_threadControll.ContainsKey(scheduleName))
                         {
+                            string vlastOutDatetime = "";
+
                             try
                             {
                                 if (_DebugMode)
@@ -3507,6 +3785,27 @@ namespace RTDWebAPI.APP
                                         {
                                             _threadControll.Add(timerID, vlastDatetime);
                                         }
+
+                                        if (_threadOutControll.ContainsKey(timerID))
+                                        {
+                                            _threadOutControll.TryGetValue(timerID, out vlastOutDatetime);
+                                        }
+                                        else
+                                        {
+                                            _threadOutControll.Add(timerID, vlastOutDatetime);
+                                        }
+
+                                        if (!vlastOutDatetime.Equals(""))
+                                        {
+                                            TimeSpan ts1 = Convert.ToDateTime(vlastOutDatetime) - Convert.ToDateTime(vlastDatetime);
+                                            if (ts1.TotalSeconds < 0)
+                                            {
+                                                if (ts1.TotalSeconds > (iTimer01 * 3))
+                                                    bDoLogic = true;
+                                                else
+                                                    bDoLogic = false;
+                                            }
+                                        }
                                     }
                                     catch (Exception ex)
                                     {
@@ -3519,6 +3818,11 @@ namespace RTDWebAPI.APP
                                         if (bCheckTimerState)
                                             _logger.Info(scheduleName);
 
+                                        if (_DebugShowDatabaseAccess)
+                                        {
+                                            string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                            _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "TriggerAlarms"));
+                                        }
                                         ///Do Logic 
                                         ///
                                         if (_functionService.TriggerAlarms(_dbTool, _configuration, _logger))
@@ -3526,6 +3830,11 @@ namespace RTDWebAPI.APP
                                         else
                                         { }
 
+                                        if (_DebugShowDatabaseAccess)
+                                        {
+                                            string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                            _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "SyncStageInfo"));
+                                        }
                                         tmpMsg = "";
                                         if (_dbTool.SQLExec(_BaseDataService.SyncStageInfo(), out tmpMsg, true))
                                         {
@@ -3535,6 +3844,11 @@ namespace RTDWebAPI.APP
                                             }
                                         }
 
+                                        if (_DebugShowDatabaseAccess)
+                                        {
+                                            string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                            _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "SyncExtenalCarrier"));
+                                        }
                                         //Sync Extenal Carrier Data.
                                         tmpMsg = "";
                                         if (_functionService.SyncExtenalCarrier(_dbTool, _configuration, _logger))
@@ -3542,6 +3856,11 @@ namespace RTDWebAPI.APP
                                             //Do Nothing
                                         }
 
+                                        if (_DebugShowDatabaseAccess)
+                                        {
+                                            string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                            _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "PreDispatchToErack"));
+                                        }
                                         //PreDispatchToErack.
                                         tmpMsg = "";
                                         if (_functionService.PreDispatchToErack(_dbTool, _configuration, _eventQueue, _logger))
@@ -3549,6 +3868,11 @@ namespace RTDWebAPI.APP
                                             //Do Nothing
                                         }
 
+                                        if (_DebugShowDatabaseAccess)
+                                        {
+                                            string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                            _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "TransferCarrierToSideWH"));
+                                        }
                                         //TransferCarrierToSideWH
                                         tmpMsg = "";
                                         if (_functionService.TransferCarrierToSideWH(_dbTool, _configuration, _eventQueue, _logger))
@@ -3561,6 +3885,11 @@ namespace RTDWebAPI.APP
                                             tmpMsg = "";
                                             string _args = "";
 
+                                            if (_DebugShowDatabaseAccess)
+                                            {
+                                                string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                                _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "CheckReserveState"));
+                                            }
                                             DateTime dtCurrent = DateTime.Now;
                                             DateTime tmpDT = DateTime.Now;
                                             //Check eqp_reserve_time --effective=1 and expired=0
@@ -3646,6 +3975,11 @@ namespace RTDWebAPI.APP
                                             //"Position": "202309221312001"
                                             tmpMsg = "";
 
+                                            if (_DebugShowDatabaseAccess)
+                                            {
+                                                string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                                _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "QueryOrderWhenOvertime"));
+                                            }
                                             //Order overtime and state is Initial
                                             int _overtimeforOrder = 10; //minutes
                                             sql = _BaseDataService.QueryOrderWhenOvertime(_overtimeforOrder.ToString(), tableOrder);
@@ -3687,6 +4021,11 @@ namespace RTDWebAPI.APP
                                         {
                                             tmpMsg = "";
 
+                                            if (_DebugShowDatabaseAccess)
+                                            {
+                                                string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                                _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "GetAllOfSysHoldCarrier"));
+                                            }
                                             //AutoRelease Carrier when hold time overtime 30 mints
                                             sql = _BaseDataService.GetAllOfSysHoldCarrier();
 
@@ -3763,6 +4102,17 @@ namespace RTDWebAPI.APP
                                     _threadControll[scheduleName] = "false";
                                 }
                             }
+
+                            if (_threadOutControll.ContainsKey(timerID))
+                            {
+                                DateTime dtCurrent = DateTime.Now;
+                                vlastOutDatetime = dtCurrent.ToString("yyyy-MM-dd HH:mm:ss");
+
+                                lock (_threadOutControll)
+                                {
+                                    _threadOutControll[timerID] = vlastOutDatetime;
+                                }
+                            }
                         }
                         else
                         {
@@ -3777,6 +4127,8 @@ namespace RTDWebAPI.APP
                         passTicket = false;
                         if (_threadControll.ContainsKey(scheduleName))
                         {
+                            string vlastOutDatetime = "";
+
                             try
                             {
                                 if (_DebugMode)
@@ -3824,6 +4176,27 @@ namespace RTDWebAPI.APP
                                         {
                                             _threadControll.Add(timerID, vlastDatetime);
                                         }
+
+                                        if (_threadOutControll.ContainsKey(timerID))
+                                        {
+                                            _threadOutControll.TryGetValue(timerID, out vlastOutDatetime);
+                                        }
+                                        else
+                                        {
+                                            _threadOutControll.Add(timerID, vlastOutDatetime);
+                                        }
+
+                                        if (!vlastOutDatetime.Equals(""))
+                                        {
+                                            TimeSpan ts1 = Convert.ToDateTime(vlastOutDatetime) - Convert.ToDateTime(vlastDatetime);
+                                            if (ts1.TotalSeconds < 0)
+                                            {
+                                                if (ts1.TotalSeconds > (iTimer01 * 3))
+                                                    bDoLogic = true;
+                                                else
+                                                    bDoLogic = false;
+                                            }
+                                        }
                                     }
                                     catch (Exception ex)
                                     {
@@ -3841,6 +4214,12 @@ namespace RTDWebAPI.APP
                                         try
                                         {
                                             tmpMsg = "";
+
+                                            if (_DebugShowDatabaseAccess)
+                                            {
+                                                string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                                _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "CheckLotInfo"));
+                                            }
                                             if (_functionService.CheckLotInfo(_dbTool, _configuration, _logger))
                                             {
 #if DEBUG
@@ -3894,6 +4273,17 @@ namespace RTDWebAPI.APP
                                     _threadControll[scheduleName] = "false";
                                 }
                             }
+
+                            if (_threadOutControll.ContainsKey(timerID))
+                            {
+                                DateTime dtCurrent = DateTime.Now;
+                                vlastOutDatetime = dtCurrent.ToString("yyyy-MM-dd HH:mm:ss");
+
+                                lock (_threadOutControll)
+                                {
+                                    _threadOutControll[timerID] = vlastOutDatetime;
+                                }
+                            }
                         }
                         else
                         {
@@ -3908,6 +4298,8 @@ namespace RTDWebAPI.APP
                         passTicket = false;
                         if (_threadControll.ContainsKey(scheduleName))
                         {
+                            string vlastOutDatetime = "";
+
                             try
                             {
                                 if (_DebugMode)
@@ -3950,6 +4342,27 @@ namespace RTDWebAPI.APP
                                                     _threadControll[timerID] = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
                                                 }
                                             }
+
+                                            if (_threadOutControll.ContainsKey(timerID))
+                                            {
+                                                _threadOutControll.TryGetValue(timerID, out vlastOutDatetime);
+                                            }
+                                            else
+                                            {
+                                                _threadOutControll.Add(timerID, vlastOutDatetime);
+                                            }
+
+                                            if (!vlastOutDatetime.Equals(""))
+                                            {
+                                                TimeSpan ts1 = Convert.ToDateTime(vlastOutDatetime) - Convert.ToDateTime(vlastDatetime);
+                                                if (ts1.TotalSeconds < 0)
+                                                {
+                                                    if (ts1.TotalSeconds > (iTimer01 * 3))
+                                                        bDoLogic = true;
+                                                    else
+                                                        bDoLogic = false;
+                                                }
+                                            }
                                         }
                                         else
                                         {
@@ -3987,6 +4400,11 @@ namespace RTDWebAPI.APP
                                         {
                                             tmpMsg = "";
 
+                                            if (_DebugShowDatabaseAccess)
+                                            {
+                                                string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                                _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "QueryLotStageWhenStageChange"));
+                                            }
                                             sql = _BaseDataService.QueryLotStageWhenStageChange(_configuration["CheckLotStage:Table"]);
                                             dt = _dbTool.GetDataTable(sql);
 
@@ -4044,6 +4462,17 @@ namespace RTDWebAPI.APP
                                     _threadControll[scheduleName] = "false";
                                 }
                             }
+
+                            if (_threadOutControll.ContainsKey(timerID))
+                            {
+                                DateTime dtCurrent = DateTime.Now;
+                                vlastOutDatetime = dtCurrent.ToString("yyyy-MM-dd HH:mm:ss");
+
+                                lock (_threadOutControll)
+                                {
+                                    _threadOutControll[timerID] = vlastOutDatetime;
+                                }
+                            }
                         }
                         else
                         {
@@ -4058,6 +4487,8 @@ namespace RTDWebAPI.APP
                         passTicket = false;
                         if (_threadControll.ContainsKey(scheduleName))
                         {
+                            string vlastOutDatetime = "";
+
                             try
                             {
                                 if (_DebugMode)
@@ -4105,6 +4536,27 @@ namespace RTDWebAPI.APP
                                         {
                                             _threadControll.Add(timerID, vlastDatetime);
                                         }
+
+                                        if (_threadOutControll.ContainsKey(timerID))
+                                        {
+                                            _threadOutControll.TryGetValue(timerID, out vlastOutDatetime);
+                                        }
+                                        else
+                                        {
+                                            _threadOutControll.Add(timerID, vlastOutDatetime);
+                                        }
+
+                                        if (!vlastOutDatetime.Equals(""))
+                                        {
+                                            TimeSpan ts1 = Convert.ToDateTime(vlastOutDatetime) - Convert.ToDateTime(vlastDatetime);
+                                            if (ts1.TotalSeconds < 0)
+                                            {
+                                                if (ts1.TotalSeconds > (iTimer01 * 3))
+                                                    bDoLogic = true;
+                                                else
+                                                    bDoLogic = false;
+                                            }
+                                        }
                                     }
                                     catch (Exception ex)
                                     {
@@ -4118,11 +4570,21 @@ namespace RTDWebAPI.APP
                                             _logger.Info(scheduleName);
                                         ///Do Logic 
 
+                                        if (_DebugShowDatabaseAccess)
+                                        {
+                                            string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                            _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "AutoHoldForDispatchIssue"));
+                                        }
                                         if (_functionService.AutoHoldForDispatchIssue(_dbTool, _configuration, _logger, out tmpMsg))
                                         {
                                             //Do Nothing.
                                         }
 
+                                        if (_DebugShowDatabaseAccess)
+                                        {
+                                            string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                            _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "SyncEQPStatus"));
+                                        }
                                         //與上位同步當前機台狀態 (超過5分鐘, 機台狀態不一致時同步)
                                         if (_functionService.SyncEQPStatus(_dbTool, _logger))
                                         {
@@ -4134,7 +4596,12 @@ namespace RTDWebAPI.APP
                                             tmpMsg = "";
                                             sql = "";
 
-                                            if(_functionService.CheckPORCAndReset(_dbTool))
+                                            if (_DebugShowDatabaseAccess)
+                                            {
+                                                string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                                _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "CheckPORCAndReset"));
+                                            }
+                                            if (_functionService.CheckPORCAndReset(_dbTool))
                                             { }
                                         }
                                         catch (Exception ex)
@@ -4149,6 +4616,11 @@ namespace RTDWebAPI.APP
                                             tmpMsg = "";
                                             sql = "";
 
+                                            if (_DebugShowDatabaseAccess)
+                                            {
+                                                string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                                _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "AutoResetCarrierReserveState"));
+                                            }
                                             //AutoResetCarrierReserveState
                                             //Condition: Carrier is Online and Not in Order 
                                             //暫不開啟
@@ -4205,6 +4677,17 @@ namespace RTDWebAPI.APP
                                     _threadControll[scheduleName] = "false";
                                 }
                             }
+
+                            if (_threadOutControll.ContainsKey(timerID))
+                            {
+                                DateTime dtCurrent = DateTime.Now;
+                                vlastOutDatetime = dtCurrent.ToString("yyyy-MM-dd HH:mm:ss");
+
+                                lock (_threadOutControll)
+                                {
+                                    _threadOutControll[timerID] = vlastOutDatetime;
+                                }
+                            }
                         }
                         else
                         {
@@ -4219,6 +4702,8 @@ namespace RTDWebAPI.APP
                         passTicket = false;
                         if (_threadControll.ContainsKey(scheduleName))
                         {
+                            string vlastOutDatetime = "";
+
                             try
                             {
                                 if (_DebugMode)
@@ -4265,6 +4750,27 @@ namespace RTDWebAPI.APP
                                         else
                                         {
                                             _threadControll.Add(timerID, vlastDatetime);
+                                        }
+
+                                        if (_threadOutControll.ContainsKey(timerID))
+                                        {
+                                            _threadOutControll.TryGetValue(timerID, out vlastOutDatetime);
+                                        }
+                                        else
+                                        {
+                                            _threadOutControll.Add(timerID, vlastOutDatetime);
+                                        }
+
+                                        if (!vlastOutDatetime.Equals(""))
+                                        {
+                                            TimeSpan ts1 = Convert.ToDateTime(vlastOutDatetime) - Convert.ToDateTime(vlastDatetime);
+                                            if (ts1.TotalSeconds < 0)
+                                            {
+                                                if (ts1.TotalSeconds > (iTimer01 * 3))
+                                                    bDoLogic = true;
+                                                else
+                                                    bDoLogic = false;
+                                            }
                                         }
                                     }
                                     catch (Exception ex)
@@ -4314,6 +4820,17 @@ namespace RTDWebAPI.APP
                                     _threadControll[scheduleName] = "false";
                                 }
                             }
+
+                            if (_threadOutControll.ContainsKey(timerID))
+                            {
+                                DateTime dtCurrent = DateTime.Now;
+                                vlastOutDatetime = dtCurrent.ToString("yyyy-MM-dd HH:mm:ss");
+
+                                lock (_threadOutControll)
+                                {
+                                    _threadOutControll[timerID] = vlastOutDatetime;
+                                }
+                            }
                         }
                         else
                         {
@@ -4328,6 +4845,8 @@ namespace RTDWebAPI.APP
                         passTicket = false;
                         if (_threadControll.ContainsKey(scheduleName))
                         {
+                            string vlastOutDatetime = "";
+
                             try
                             {
                                 if (_DebugMode)
@@ -4375,6 +4894,27 @@ namespace RTDWebAPI.APP
                                         {
                                             _threadControll.Add(timerID, vlastDatetime);
                                         }
+
+                                        if (_threadOutControll.ContainsKey(timerID))
+                                        {
+                                            _threadOutControll.TryGetValue(timerID, out vlastOutDatetime);
+                                        }
+                                        else
+                                        {
+                                            _threadOutControll.Add(timerID, vlastOutDatetime);
+                                        }
+
+                                        if (!vlastOutDatetime.Equals(""))
+                                        {
+                                            TimeSpan ts1 = Convert.ToDateTime(vlastOutDatetime) - Convert.ToDateTime(vlastDatetime);
+                                            if (ts1.TotalSeconds < 0)
+                                            {
+                                                if (ts1.TotalSeconds > (iTimer01 * 3))
+                                                    bDoLogic = true;
+                                                else
+                                                    bDoLogic = false;
+                                            }
+                                        }
                                     }
                                     catch (Exception ex)
                                     {
@@ -4419,6 +4959,17 @@ namespace RTDWebAPI.APP
                                 lock (_threadControll)
                                 {
                                     _threadControll[scheduleName] = "false";
+                                }
+                            }
+
+                            if (_threadOutControll.ContainsKey(timerID))
+                            {
+                                DateTime dtCurrent = DateTime.Now;
+                                vlastOutDatetime = dtCurrent.ToString("yyyy-MM-dd HH:mm:ss");
+
+                                lock (_threadOutControll)
+                                {
+                                    _threadOutControll[timerID] = vlastOutDatetime;
                                 }
                             }
                         }
@@ -4435,6 +4986,8 @@ namespace RTDWebAPI.APP
                         passTicket = false;
                         if (_threadControll.ContainsKey(scheduleName))
                         {
+                            string vlastOutDatetime = "";
+
                             try
                             {
                                 if (_DebugMode)
@@ -4482,6 +5035,27 @@ namespace RTDWebAPI.APP
                                         {
                                             _threadControll.Add(timerID, vlastDatetime);
                                         }
+
+                                        if (_threadOutControll.ContainsKey(timerID))
+                                        {
+                                            _threadOutControll.TryGetValue(timerID, out vlastOutDatetime);
+                                        }
+                                        else
+                                        {
+                                            _threadOutControll.Add(timerID, vlastOutDatetime);
+                                        }
+
+                                        if (!vlastOutDatetime.Equals(""))
+                                        {
+                                            TimeSpan ts1 = Convert.ToDateTime(vlastOutDatetime) - Convert.ToDateTime(vlastDatetime);
+                                            if (ts1.TotalSeconds < 0)
+                                            {
+                                                if (ts1.TotalSeconds > (iTimer01 * 3))
+                                                    bDoLogic = true;
+                                                else
+                                                    bDoLogic = false;
+                                            }
+                                        }
                                     }
                                     catch (Exception ex)
                                     {
@@ -4528,6 +5102,17 @@ namespace RTDWebAPI.APP
                                     _threadControll[scheduleName] = "false";
                                 }
                             }
+
+                            if (_threadOutControll.ContainsKey(timerID))
+                            {
+                                DateTime dtCurrent = DateTime.Now;
+                                vlastOutDatetime = dtCurrent.ToString("yyyy-MM-dd HH:mm:ss");
+
+                                lock (_threadOutControll)
+                                {
+                                    _threadOutControll[timerID] = vlastOutDatetime;
+                                }
+                            }
                         }
                         else
                         {
@@ -4542,6 +5127,8 @@ namespace RTDWebAPI.APP
                         passTicket = false;
                         if (_threadControll.ContainsKey(scheduleName))
                         {
+                            string vlastOutDatetime = "";
+
                             try
                             {
                                 if (_DebugMode)
@@ -4589,6 +5176,27 @@ namespace RTDWebAPI.APP
                                         {
                                             _threadControll.Add(timerID, vlastDatetime);
                                         }
+
+                                        if (_threadOutControll.ContainsKey(timerID))
+                                        {
+                                            _threadOutControll.TryGetValue(timerID, out vlastOutDatetime);
+                                        }
+                                        else
+                                        {
+                                            _threadOutControll.Add(timerID, vlastOutDatetime);
+                                        }
+
+                                        if (!vlastOutDatetime.Equals(""))
+                                        {
+                                            TimeSpan ts1 = Convert.ToDateTime(vlastOutDatetime) - Convert.ToDateTime(vlastDatetime);
+                                            if (ts1.TotalSeconds < 0)
+                                            {
+                                                if (ts1.TotalSeconds > (iTimer01 * 3))
+                                                    bDoLogic = true;
+                                                else
+                                                    bDoLogic = false;
+                                            }
+                                        }
                                     }
                                     catch (Exception ex)
                                     {
@@ -4606,6 +5214,11 @@ namespace RTDWebAPI.APP
                                         try {
                                             _cleandays = _configuration["AutoCleanLot:overdays"] is null ? 7 : int.Parse(_configuration["AutoCleanLot:overdays"]);
 
+                                            if (_DebugShowDatabaseAccess)
+                                            {
+                                                string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                                _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "CleanLotInfo"));
+                                            }
                                             _dbTool.SQLExec(_BaseDataService.CleanLotInfo(_cleandays), out tmpMsg, true);
                                         }
                                         catch (Exception ex) { }
@@ -4643,6 +5256,17 @@ namespace RTDWebAPI.APP
                                     _threadControll[scheduleName] = "false";
                                 }
                             }
+
+                            if (_threadOutControll.ContainsKey(timerID))
+                            {
+                                DateTime dtCurrent = DateTime.Now;
+                                vlastOutDatetime = dtCurrent.ToString("yyyy-MM-dd HH:mm:ss");
+
+                                lock (_threadOutControll)
+                                {
+                                    _threadOutControll[timerID] = vlastOutDatetime;
+                                }
+                            }
                         }
                         else
                         {
@@ -4660,6 +5284,8 @@ namespace RTDWebAPI.APP
                         passTicket = false;
                         if (_threadControll.ContainsKey(scheduleName))
                         {
+                            string vlastOutDatetime = "";
+
                             try
                             {
                                 if (_DebugMode)
@@ -4707,6 +5333,27 @@ namespace RTDWebAPI.APP
                                         {
                                             _threadControll.Add(timerID, vlastDatetime);
                                         }
+
+                                        if (_threadOutControll.ContainsKey(timerID))
+                                        {
+                                            _threadOutControll.TryGetValue(timerID, out vlastOutDatetime);
+                                        }
+                                        else
+                                        {
+                                            _threadOutControll.Add(timerID, vlastOutDatetime);
+                                        }
+
+                                        if (!vlastOutDatetime.Equals(""))
+                                        {
+                                            TimeSpan ts1 = Convert.ToDateTime(vlastOutDatetime) - Convert.ToDateTime(vlastDatetime);
+                                            if (ts1.TotalSeconds < 0)
+                                            {
+                                                if (ts1.TotalSeconds > (iTimer01 * 3))
+                                                    bDoLogic = true;
+                                                else
+                                                    bDoLogic = false;
+                                            }
+                                        }
                                     }
                                     catch (Exception ex)
                                     {
@@ -4720,6 +5367,11 @@ namespace RTDWebAPI.APP
                                             _logger.Info(scheduleName);
                                         ///Do Logic 
 
+                                        if (_DebugShowDatabaseAccess)
+                                        {
+                                            string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                                            _logger.Debug(string.Format("{0} send sql to database for {1}", dtNow, "SyncEotdData"));
+                                        }
                                         if (_functionService.SyncEotdData(_dbTool, _configuration, _logger))
                                         {
                                             //Do Nothing.
@@ -4757,14 +5409,23 @@ namespace RTDWebAPI.APP
                                     _threadControll[scheduleName] = "false";
                                 }
                             }
+
+                            if (_threadOutControll.ContainsKey(timerID))
+                            {
+                                DateTime dtCurrent = DateTime.Now;
+                                vlastOutDatetime = dtCurrent.ToString("yyyy-MM-dd HH:mm:ss");
+
+                                lock (_threadOutControll)
+                                {
+                                    _threadOutControll[timerID] = vlastOutDatetime;
+                                }
+                            }
                         }
                         else
                         {
                             _threadControll.Add(scheduleName, vKey);
                         }
-
                     }
-
                 }
             }
             catch(Exception ex)
@@ -4774,7 +5435,19 @@ namespace RTDWebAPI.APP
 
         DBissue:
 
+            ///1.0.25.0204.1.0.0
+            if (_DebugShowDatabaseAccess)
+            {
+                string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                _logger.Debug(string.Format("{0} [{1}] send disconnect command to database [{2}]", dtNow, tmpThreadNo, "DisConnectDB"));
+            }
             _dbTool.DisConnectDB(out tmpMsg);
+
+            if(!tmpMsg.Equals(""))
+            {
+                string dtNow = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
+                _logger.Debug(string.Format("{0} [{1}] database disconnect issue: [{2}]", dtNow, tmpThreadNo, tmpMsg));
+            }
             _dbTool = null;
         }
     }

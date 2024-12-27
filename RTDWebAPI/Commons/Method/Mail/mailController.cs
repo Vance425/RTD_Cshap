@@ -1,6 +1,6 @@
 ﻿using Microsoft.Extensions.Configuration;
 using NLog;
-using RTDWebAPI.Commons.Method.Database;
+using RTDDAC;
 using System;
 using System.Net;
 using System.Net.Mail;

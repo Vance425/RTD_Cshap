@@ -2,7 +2,7 @@
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json.Linq;
 using NLog;
-using RTDWebAPI.Commons.Method.Database;
+using RTDDAC;
 using RTDWebAPI.Interface;
 using RTDWebAPI.Models;
 using System;

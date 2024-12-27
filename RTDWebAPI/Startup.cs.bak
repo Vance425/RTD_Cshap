@@ -8,7 +8,6 @@ using System.Threading.Tasks;
 using RTDWebAPI.Models;
 using System.Collections.Concurrent;
 using System;
-using RTDWebAPI.Commons.Method.Database;
 using RTDWebAPI.Controllers;
 using NLog.Config;
 using NLog.Targets;

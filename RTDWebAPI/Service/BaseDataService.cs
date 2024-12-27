@@ -1,4 +1,5 @@
-﻿using RTDWebAPI.Commons.DataRelated.SQLSentence;
+﻿using GyroLibrary;
+using RTDWebAPI.Commons.DataRelated.SQLSentence;
 using RTDWebAPI.Interface;
 using RTDWebAPI.Models;
 using System;
@@ -609,7 +610,7 @@ left join carrier_transfer ct on ct.carrier_id=ca.carrier_id
             string _orderby = "";
 
             if (_OnlyStage)
-                _orderby = "a.stage, a.rtd_state, a.priority desc , a.lot_age desc";
+                _orderby = "a.priority desc , a.lot_age desc";
             else
                 _orderby = "a.customername, a.stage, a.rtd_state, a.priority desc, a.lot_age desc";
 
@@ -1037,9 +1038,9 @@ left join carrier_transfer ct on ct.carrier_id=ca.carrier_id
             string strSQL = "";
 
             strSQL = string.Format(@"update lot_info set (priority,carrier_asso,equip_asso,equiplist,lastmodify_dt,rtd_state,
-                                        state,wfr_qty,dies_qty,stage,lottype,lot_age,planstarttime,starttime,lockmachine,comp_qty) 
+                                        state,wfr_qty,dies_qty,stage,lottype,lot_age,planstarttime,starttime,lockmachine,comp_qty,qtime) 
                                         = (select priority, 'N', 'N', '', sysdate, 'INIT', state,wfr_qty,
-                                        dies_qty,stage,lottype,lot_age,planstarttime,starttime,0,0 from {0} where lotid = '{1}')
+                                        dies_qty,stage,lottype,lot_age,planstarttime,starttime,0,0,0 from {0} where lotid = '{1}')
                                         where lotid = '{1}'", _resourceTable, _lotid);
 
             return strSQL;
@@ -1049,9 +1050,9 @@ left join carrier_transfer ct on ct.carrier_id=ca.carrier_id
             string strSQL = "";
 
             strSQL = string.Format(@"update lot_info set (carrier_asso,equip_asso,equiplist,lastmodify_dt,rtd_state,
-                                        state,wfr_qty,dies_qty,stage,lottype,lot_age,planstarttime,starttime,lockmachine,comp_qty) 
+                                        state,wfr_qty,dies_qty,stage,lottype,lot_age,planstarttime,starttime,lockmachine,comp_qty,qtime) 
                                         = (select 'N', 'N', '', sysdate, 'INIT', state,wfr_qty,
-                                        dies_qty,stage,lottype,lot_age,planstarttime,starttime,0,0 from {0} where lotid = '{1}')
+                                        dies_qty,stage,lottype,lot_age,planstarttime,starttime,0,0,0 from {0} where lotid = '{1}')
                                         where lotid = '{1}'", _resourceTable, _lotid);
 
             return strSQL;
@@ -1758,7 +1759,7 @@ left join carrier_transfer ct on ct.carrier_id=ca.carrier_id
 
             string tmpWhere = String.Format(" where a.equip_type is not null {0}{1}", tmpEqpType, tmpEquips);
 
-            string strSQL = string.Format(@"Insert into promis_stage_equip_matrix
+            string strSQL = string.Format(@"Insert into promis_stage_equip_matrix (eqpid, stage, eqptype, entryby, entrydate) 
                                             select a.equipid, '{0}' as stage, a.equip_typeid, '{1}' as entryby, 
                                             sysdate as entrydate from eqp_status a {2}", _stage, _userId, tmpWhere);
             return strSQL;
@@ -2761,7 +2762,7 @@ strSQL = string.Format(@"select carr.carrier_id, carr.carrier_state, carr.locate
 Round((carr.qtime-carr.minallowabletw)/nullif((carr.maxallowabletw-carr.minallowabletw), 0), 3) as qTime1,
 case when carr.maxallowabletw > 0 then case when carr.maxallowabletw-carr.qtime < 3 then 'Y' else 'N' end else 'N' end as gonow, carr.wpriority, carr.custdevice, carr.lot_age, carr.lot_priority from 
 (select a.carrier_id, a.carrier_state, a.locate, a.portno, a.enable, a.location_type,a.metal_ring, c.quantity, case when d.total_qty is null then 0 else d.total_qty end as total_qty,
-                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(d.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, nvl(g.priority, 20) as wPriority, d.custdevice, d.lot_age, case when d.priority > 70 then d.priority else 0 end as lot_priority from CARRIER_TRANSFER a
+                                    b.carrier_type, b.command_type, c.tag_type, c.lot_id, c.carrier_type as carrierType, d.sch_seq, nvl(f.qtime, 0) as qtime, nvl(to_number(f.minallowabletw), 0) as minallowabletw, nvl(to_number(f.maxallowabletw), 0) as maxallowabletw, nvl(g.priority, 20) as wPriority, d.custdevice, d.lot_age, case when d.priority > 70 then d.priority else 0 end as lot_priority from CARRIER_TRANSFER a
                                 left join CARRIER_TYPE_SET b on b.type_key = a.type_key
                                 left join CARRIER_LOT_ASSOCIATE c on c.carrier_id = a.carrier_id
                                 left join LOT_INFO d on d.lotid=c.lot_id
@@ -4447,7 +4448,7 @@ values ('{0}','{1}','{2}',sysdate, 0)";
         {
             string strSQL = "";
 
-            strSQL = @"select a.carrier_id, c.lotid, c.enddate, a.carrier_state, a.locate, a.portno, a.location_type, a.quantity from carrier_transfer a
+            strSQL = @"select a.carrier_id, c.lotid, c.enddate, c.eotd, a.carrier_state, a.locate, a.portno, a.location_type, a.quantity from carrier_transfer a
 left join carrier_lot_associate b on b.carrier_id=a.carrier_id
 left join lot_info c on c.lotid=b.lot_id
 where a.carrier_state='ONLINE' and lotid is not null";
@@ -4588,6 +4589,43 @@ where a.carrier_state='ONLINE' and lotid is not null";
                 strSQL = string.Format(@"update workgroup_set {0} {1}
                                             ", tmpSet, strSQL);
             }
+
+            return strSQL;
+        }
+        public string InsertRTDParameterSet(Dictionary<string, object> _object)
+        {
+            string strSQL = "";
+            string strSet = "";
+
+            strSQL = string.Format(@"insert into rtd_default_set (parameter, paramtype, paramvalue, modifyby, lastmodify_dt, description)
+values('{0}', '{1}', '{2}', '{3}', sysdate, '{4}')", (string)_object[ConstParams.Parameter], (string)_object[ConstParams.Paramtype], (string)_object[ConstParams.Paramvalue], (string)_object[ConstParams.Modifyby], (string)_object[ConstParams.Description]);
+
+            return strSQL;
+        }
+        public string UadateRTDParameterSet(Dictionary<string, object> _object)
+        {
+            string strSQL = "";
+            string strSet = "";
+            string strWhere = "";
+
+
+            strSet = string.Format(@"set paramvalue = '{0}'", (string)_object[ConstParams.Paramvalue]);
+            strWhere = string.Format(@"where parameter = '{0}' and paramtype = '{1}'", (string)_object[ConstParams.Parameter], (string)_object[ConstParams.Paramtype]);
+
+            strSQL = string.Format(@"update rtd_default_set {0} {1}", strSet, strWhere);
+
+            return strSQL;
+        }
+        public string RemoveLotFromLotInfo(string _lotID)
+        {
+            string strSQL = "";
+            string strSet = "";
+            string strWhere = "";
+
+            strSet = string.Format(@"rtd_state = 'DELETED', sch_seq = 0, equip_asso = 'N', lastmodify_dt = sysdate");
+            strWhere = string.Format(@"where lotid = '{0}'", _lotID);
+
+            strSQL = string.Format(@"update lot_info set {0} {1}", strSet, strWhere);
 
             return strSQL;
         }

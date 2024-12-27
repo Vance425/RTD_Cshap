@@ -1,11 +1,14 @@
-﻿using Microsoft.Extensions.Configuration;
+﻿using Commons.Method.Tools;
+using GyroLibrary;
+using Microsoft.Extensions.Configuration;
 using NLog;
-using RTDWebAPI.Commons.Method.Database;
+using RTDDAC;
 using RTDWebAPI.Commons.Method.WSClient;
 using RTDWebAPI.Interface;
 using RTDWebAPI.Service;
 using System;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Data;
 using System.Threading;
 using System.Threading.Tasks;
@@ -110,6 +113,7 @@ namespace RTDWebAPI.APP
                                 evtLogicService._listDBSession = _listDBSession;
                                 evtLogicService._uiDataCatch = _uiDataCatch;
                                 evtLogicService._alarmDetail = _alarmDetail;
+                                evtLogicService._payload = _payload;
 
                                 Task taskEvtLogicService = Task.Run(() =>
                                 {
@@ -118,6 +122,12 @@ namespace RTDWebAPI.APP
                                     Console.WriteLine(tmpMsg);
                                     tmpMsg = string.Format("Critical issue. RTD Event Logic Service down at [{0}].", DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss"));
                                     _logger.Info(tmpMsg);
+
+                                    string _Seckey = RTDSecurity.GenerateSecurityKey();
+                                    string _OriSecKey = (string)((Dictionary<string, object>)_payload)[CommonsConst.RTDSecKey];
+                                    RTDSecurity.RegisterSecurityKey(_dbTool, _Seckey);
+                                    ((Dictionary<string, object>)_payload)[CommonsConst.RTDSecKey] = _Seckey;
+                                    _logger.Info(string.Format("{0} Security Key Change from {1} to {2}", DateTime.Now.ToString("yyyy/MM/dd HH:mm:ss"), _OriSecKey, _Seckey));
                                 });
                             }
                         }

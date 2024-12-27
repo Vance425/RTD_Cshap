@@ -2,7 +2,6 @@
 using NLog;
 using RTDWebAPI.APP;
 using RTDWebAPI.Commons.DataRelated.SQLSentence;
-using RTDWebAPI.Commons.Method.Database;
 using RTDWebAPI.Models;
 using System.Collections.Concurrent;
 using System.Collections.Generic;

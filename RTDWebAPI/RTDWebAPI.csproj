@@ -69,6 +69,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <None Include="Commons.Method.Tools.csproj" />
     <None Include="Commons\Method\HttpClientCallJWTAPI.sln" />
   </ItemGroup>
 
@@ -88,11 +89,11 @@
     <PackageReference Include="Microsoft.VisualStudio.Azure.Containers.Tools.Targets" Version="1.15.1" />
     <PackageReference Include="Nancy.Serialization.JsonNet" Version="1.4.1" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
-    <PackageReference Include="NLog" Version="4.7.15" />
+    <PackageReference Include="NLog" Version="5.4.0" />
     <PackageReference Include="Node.js" Version="5.3.0" />
     <PackageReference Include="node.TypeScript.DefinitelyTyped" Version="3.4.2" />
     <PackageReference Include="ODP.NetCore" Version="2.0.12" />
-    <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="3.21.120" />
+    <PackageReference Include="Oracle.ManagedDataAccess.Core" Version="23.7.0" />
     <PackageReference Include="Secs4Net" Version="2.0.2" />
     <PackageReference Include="ServiceStack" Version="6.3.0" />
     <PackageReference Include="Swagger.Net.UI" Version="1.1.0" />
@@ -107,6 +108,11 @@
     <PackageReference Include="System.ServiceModel.NetTcp" Version="4.8.*" />
     <PackageReference Include="System.ServiceModel.Security" Version="4.8.*" />
     <PackageReference Include="System.Web.Services.Description" Version="4.9.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Commons.Method.Tools\Commons.Method.Tools.csproj" />
+    <ProjectReference Include="..\GyroSystemController\GyroSystemControl.csproj" />
   </ItemGroup>
 
   <ItemGroup>

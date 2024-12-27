@@ -3,8 +3,8 @@ using Nancy.Json;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NLog;
+using RTDDAC;
 using RTDWebAPI.APP;
-using RTDWebAPI.Commons.Method.Database;
 using RTDWebAPI.Commons.Method.Mail;
 using RTDWebAPI.Commons.Method.Tools;
 using RTDWebAPI.Commons.Method.WSClient;
@@ -807,6 +807,7 @@ namespace RTDWebAPI.Service
             DateTime _stopTime;
             TimeSpan _tSpan;
             int _schSeqMode = 0;
+            bool _removeLot = false;
 
             try
             {
@@ -862,6 +863,7 @@ namespace RTDWebAPI.Service
                 DataRow[] drTemp;
 
                 _schSeqMode = _configuration["RTDEnvironment:ScheduleSeqMode"] is null ? 0 : int.Parse(_configuration["RTDEnvironment:ScheduleSeqMode"].ToString());
+                _removeLot = _configuration["SyncExtenalData:AdsInfo:RemoveWhenNotExistADS"] is null ? false : _configuration["SyncExtenalData:AdsInfo:RemoveWhenNotExistADS"].ToString().Equals("True") ? true : false;
 
                 if (dt.Rows.Count > 0)
                 {
@@ -882,15 +884,24 @@ namespace RTDWebAPI.Service
 
                             if (dtTemp.Rows.Count > 0)
                             {
-                                try {
+                                try
+                                {
                                     dr2["adslot"] = dtTemp.Rows[0]["lotid"].ToString().Equals("") ? "Null" : dtTemp.Rows[0]["lotid"].ToString();
                                     dr2["stageage"] = dtTemp.Rows[0]["stageage"].ToString();
                                     dr2["qtime2"] = dtTemp.Rows[0]["qtime"].ToString();
                                 }
-                                catch(Exception ex) { }
+                                catch (Exception ex) { }
                             }
                             else
+                            {
                                 dr2["adslot"] = "Null";
+                                
+                                if (_removeLot)
+                                {
+                                    _dbTool.SQLExec(_BaseDataService.RemoveLotFromLotInfo(dr2["lotid"].ToString()), out tmpMsg, true);
+                                    _logger.Info(string.Format("Remove lot [{0}] from lot_info, cause the lotid not exist ads table. ", dr2["lotid"].ToString()));
+                                }
+                            }
 
                             //Sync TurnRatio
 
@@ -939,7 +950,7 @@ namespace RTDWebAPI.Service
                                 dtCopy = dv.ToTable();
                                 break;
                             case 1:
-                                dv.Sort = "rtd_state, priority desc , turnratio3 desc";
+                                dv.Sort = "priority desc , turnratio3 desc";
                                 dtCopy = dv.ToTable();
                                 break;
                             default:
@@ -3852,12 +3863,12 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                                                     ineRack = dtWorkgroupSet.Rows[0]["IN_ERACK"] is null ? "" : dtWorkgroupSet.Rows[0]["IN_ERACK"].ToString();
                                                     bCheckEquipLookupTable = dtWorkgroupSet.Rows[0]["CHECKEQPLOOKUPTABLE"] is null ? false : dtWorkgroupSet.Rows[0]["CHECKEQPLOOKUPTABLE"].ToString().Equals("1") ? true : false;
                                                     //rcpconstraint
-                                                    bCheckRcpConstraint = drWorkgroup[0]["RCPCONSTRAINT"] is null ? false : drWorkgroup[0]["RCPCONSTRAINT"].ToString().Equals("1") ? true : false;
-                                                    bCheckRecipe = drWorkgroup[0]["CHECKCUSTDEVICE"] is null ? false : drWorkgroup[0]["CHECKCUSTDEVICE"].ToString().Equals("1") ? true : false;
+                                                    bCheckRcpConstraint = dtWorkgroupSet.Rows[0]["RCPCONSTRAINT"] is null ? false : dtWorkgroupSet.Rows[0]["RCPCONSTRAINT"].ToString().Equals("1") ? true : false;
+                                                    bCheckRecipe = dtWorkgroupSet.Rows[0]["CHECKCUSTDEVICE"] is null ? false : dtWorkgroupSet.Rows[0]["CHECKCUSTDEVICE"].ToString().Equals("1") ? true : false;
                                                     _priority = 20;
-                                                    _stageController = drWorkgroup[0]["stagecontroller"] is null ? false : drWorkgroup[0]["stagecontroller"].ToString().Equals("1") ? true : false;
-                                                    _cannotSame = drWorkgroup[0]["cannotsame"] is null ? false : drWorkgroup[0]["cannotsame"].ToString().Equals("1") ? true : false;
-                                                    _aoiMeasurementLogic = drWorkgroup[0]["aoimeasurement"] is null ? false : drWorkgroup[0]["aoimeasurement"].ToString().Equals("1") ? true : false;
+                                                    _stageController = dtWorkgroupSet.Rows[0]["stagecontroller"] is null ? false : dtWorkgroupSet.Rows[0]["stagecontroller"].ToString().Equals("1") ? true : false;
+                                                    _cannotSame = dtWorkgroupSet.Rows[0]["cannotsame"] is null ? false : dtWorkgroupSet.Rows[0]["cannotsame"].ToString().Equals("1") ? true : false;
+                                                    _aoiMeasurementLogic = dtWorkgroupSet.Rows[0]["aoimeasurement"] is null ? false : dtWorkgroupSet.Rows[0]["aoimeasurement"].ToString().Equals("1") ? true : false;
                                                 }
                                             }
                                         }
@@ -3892,9 +3903,9 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                                                 bCheckRcpConstraint = drWorkgroup[0]["RCPCONSTRAINT"] is null ? false : drWorkgroup[0]["RCPCONSTRAINT"].ToString().Equals("1") ? true : false;
                                                 _priority = 30;
                                                 bCheckRecipe = dtWorkgroupSet.Rows[0]["CHECKCUSTDEVICE"] is null ? false : dtWorkgroupSet.Rows[0]["CHECKCUSTDEVICE"].ToString().Equals("1") ? true : false;
-                                                _stageController = drWorkgroup[0]["stagecontroller"] is null ? false : drWorkgroup[0]["stagecontroller"].ToString().Equals("1") ? true : false;
-                                                _cannotSame = drWorkgroup[0]["cannotsame"] is null ? false : drWorkgroup[0]["cannotsame"].ToString().Equals("1") ? true : false;
-                                                _aoiMeasurementLogic = drWorkgroup[0]["aoimeasurement"] is null ? false : drWorkgroup[0]["aoimeasurement"].ToString().Equals("1") ? true : false;
+                                                _stageController = dtWorkgroupSet.Rows[0]["stagecontroller"] is null ? false : dtWorkgroupSet.Rows[0]["stagecontroller"].ToString().Equals("1") ? true : false;
+                                                _cannotSame = dtWorkgroupSet.Rows[0]["cannotsame"] is null ? false : dtWorkgroupSet.Rows[0]["cannotsame"].ToString().Equals("1") ? true : false;
+                                                _aoiMeasurementLogic = dtWorkgroupSet.Rows[0]["aoimeasurement"] is null ? false : dtWorkgroupSet.Rows[0]["aoimeasurement"].ToString().Equals("1") ? true : false;
                                             }
                                         }
                                     }
@@ -4194,6 +4205,7 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                                             continue;
 
                                         //取得當前Load Port上的Carrier
+                                        UnloadCarrierID = "";
                                         dtLoadPortCarrier = _dbTool.GetDataTable(_BaseDataService.SelectLoadPortCarrierByEquipId(drRecord["EQUIPID"].ToString()));
                                         if (dtLoadPortCarrier.Rows.Count > 0)
                                         {
@@ -5639,7 +5651,7 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                                             if (!bNearComplete)
                                                 break;
                                         }
-                                        else if (iPortState == 3)
+                                        else if (iPortState == 3 || iPortState == 5)
                                         {
                                             try
                                             {
@@ -5691,6 +5703,7 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                                             }
 
                                             //取得當前Load Port上的Carrier
+                                            UnloadCarrierID = "";
                                             dtLoadPortCarrier = _dbTool.GetDataTable(_BaseDataService.SelectLoadPortCarrierByEquipId(drRecord["EQUIPID"].ToString()));
                                             if (dtLoadPortCarrier is not null)
                                             {
@@ -6376,11 +6389,12 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
 
                                         UnloadLogic:
 
-                                            if (dtAvaileCarrier.Rows.Count <= 0 || bIsMatch || CarrierID.Equals("") || bNoFind || isManualMode)
+                                            if (dtAvaileCarrier is null || dtAvaileCarrier.Rows.Count <= 0 || bIsMatch || CarrierID.Equals("") || bNoFind || isManualMode)
                                             {
                                                 if (_DebugMode)
                                                 {
-                                                    _logger.Debug(string.Format("[dtAvaileCarrier] Have Availe Carrier {0}", dtAvaileCarrier.Rows.Count));
+                                                    if(dtAvaileCarrier is not null)
+                                                        _logger.Debug(string.Format("[dtAvaileCarrier] Have Availe Carrier {0}", dtAvaileCarrier.Rows.Count));
                                                 }
 
                                                 String tmp11 = "";
@@ -6399,7 +6413,7 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                                                     if (isMeasureFail)
                                                         tempDest = faileRack;
                                                     else
-                                                        tempDest = drRecord[tmpReject].ToString();
+                                                        tempDest = drRecord[tmpReject].ToString().Equals("") ? drRecord["IN_ERACK"].ToString() : drRecord[tmpReject].ToString();
                                                 }
                                                 else
                                                 {
@@ -6452,7 +6466,7 @@ sql = _BaseDataService.CheckLotStage(configuration["CheckLotStage:Table"], lotID
                                                     _logger.Debug(string.Format("[dtAvaileCarrier] Unload Carrier ID [{0}] / {1}", lstTransfer.CarrierID, normalTransfer.Transfer.Count));
                                                 }
 
-                                                if (dtAvaileCarrier.Rows.Count <= 0 || isManualMode)
+                                                if (dtAvaileCarrier is null || dtAvaileCarrier.Rows.Count <= 0 || isManualMode)
                                                 {
                                                     break;
                                                 }
@@ -12609,12 +12623,12 @@ Detail: {6}", rtdAlarms.UnitType, rtdAlarms.UnitID, rtdAlarms.Code, rtdAlarms.Ca
                     try {
 
                         _lotid = dr2["lotid"].ToString();
-                        _eotd = dr2["enddate"].ToString();
+                        _eotd = dr2["eotd"] is null ? "" : dr2["eotd"].ToString();
 
                         dtTemp = _dbTool.GetDataTable(_BaseDataService.GetNewEotdByLot(_lotid));
                         if (dtTemp.Rows.Count > 0)
                         {
-                            _newEotd = dtTemp.Rows[0]["enddate"].ToString();
+                            _newEotd = dtTemp.Rows[0]["eotd"] is null? "" : dtTemp.Rows[0]["eotd"].ToString();
                         }
 
                         if (!_newEotd.Equals(""))

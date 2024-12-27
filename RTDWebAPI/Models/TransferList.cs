@@ -13,5 +13,6 @@ namespace RTDWebAPI.Models
         public int IsLastLot { get; set; }
         public string CarrierType { get; set; }
         public string CommandType { get; set; }
+        public string CommandState { get; set; }
     }
 }

@@ -1,7 +1,7 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using NLog;
-using RTDWebAPI.Commons.Method.Database;
+using RTDDAC;
 using RTDWebAPI.Interface;
 using RTDWebAPI.Models;
 using RTDWebAPI.Service;
@@ -27,6 +27,7 @@ namespace RTDWebAPI.APP
         public static IBaseDataService _BaseDataService = new BaseDataService();
         public Dictionary<string, object> _uiDataCatch { get; set; }
         public int _inUse { get; set; }
+        public Dictionary<string, object> _payload { get; set; }
 
         public ILogger _logger { get; set; }
 

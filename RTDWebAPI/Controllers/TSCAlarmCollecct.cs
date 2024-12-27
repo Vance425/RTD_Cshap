@@ -2,8 +2,8 @@
 using Microsoft.Extensions.Configuration;
 using Nancy.Json;
 using NLog;
+using RTDDAC;
 using RTDWebAPI.Commons.DataRelated.SQLSentence;
-using RTDWebAPI.Commons.Method.Database;
 using RTDWebAPI.Interface;
 using RTDWebAPI.Models;
 using RTDWebAPI.Service;

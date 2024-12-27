@@ -5,6 +5,12 @@ VisualStudioVersion = 17.1.32319.34
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "RTDWebAPI", "RTDWebAPI\RTDWebAPI.csproj", "{7F7A5A63-B27C-4E06-A868-14C1FC249C3C}"
 EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Commons.Method.Tools", "Commons.Method.Tools\Commons.Method.Tools.csproj", "{6CF78C53-03AC-4519-9341-8E27FD169347}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Rtddac", "Rtddac\Rtddac.csproj", "{D670E70F-C19E-42D4-8A5F-6B0171D5C082}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "GyroSystemControl", "GyroSystemController\GyroSystemControl.csproj", "{E1FB309C-86C6-4687-BBBE-93E8C086DA0F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +21,18 @@ Global
 		{7F7A5A63-B27C-4E06-A868-14C1FC249C3C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{7F7A5A63-B27C-4E06-A868-14C1FC249C3C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{7F7A5A63-B27C-4E06-A868-14C1FC249C3C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{6CF78C53-03AC-4519-9341-8E27FD169347}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{6CF78C53-03AC-4519-9341-8E27FD169347}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{6CF78C53-03AC-4519-9341-8E27FD169347}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{6CF78C53-03AC-4519-9341-8E27FD169347}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D670E70F-C19E-42D4-8A5F-6B0171D5C082}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D670E70F-C19E-42D4-8A5F-6B0171D5C082}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D670E70F-C19E-42D4-8A5F-6B0171D5C082}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D670E70F-C19E-42D4-8A5F-6B0171D5C082}.Release|Any CPU.Build.0 = Release|Any CPU
+		{E1FB309C-86C6-4687-BBBE-93E8C086DA0F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{E1FB309C-86C6-4687-BBBE-93E8C086DA0F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{E1FB309C-86C6-4687-BBBE-93E8C086DA0F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{E1FB309C-86C6-4687-BBBE-93E8C086DA0F}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

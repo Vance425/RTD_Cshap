@@ -1,7 +1,6 @@
 ﻿using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using NLog;
-using RTDWebAPI.Commons.Method.Database;
 using RTDWebAPI.Interface;
 using RTDWebAPI.Models;
 using RTDWebAPI.Service;

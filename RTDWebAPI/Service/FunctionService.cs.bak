@@ -4,7 +4,6 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NLog;
 using RTDWebAPI.APP;
-using RTDWebAPI.Commons.Method.Database;
 using RTDWebAPI.Commons.Method.Mail;
 using RTDWebAPI.Commons.Method.Tools;
 using RTDWebAPI.Commons.Method.WSClient;

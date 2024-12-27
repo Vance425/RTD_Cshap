@@ -1,3 +1,7 @@
+///Startup.cs
+/**
+  **RTD Web API
+  **/
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Configuration;
@@ -8,7 +12,6 @@ using System.Threading.Tasks;
 using RTDWebAPI.Models;
 using System.Collections.Concurrent;
 using System;
-using RTDWebAPI.Commons.Method.Database;
 using RTDWebAPI.Controllers;
 using NLog.Config;
 using NLog.Targets;
@@ -20,24 +23,36 @@ using RTDWebAPI.Interface;
 using RTDWebAPI.Service;
 using RTDWebAPI.Commons.Method.Tools;
 using System.Data;
+using Commons.Method.Tools;
+using OracleSequence = RTDWebAPI.Commons.Method.Tools.OracleSequence;
+using RTDDAC;
+using GyroSystemControl;
+using GyroLibrary;
 
 namespace RTDWebAPI
 {
     public class Startup
     {
+        ClassGyroSystemControl _tmpClassGyroSystemControl;
         DBPool dbPool = null;
         DBTool dbTool = null;
         DBTool dbAPI = null;
         ConcurrentQueue<EventQueue> eventQ = null;
         public IFunctionService functionService { get; set; }
         Dictionary<string, string> threadControll = new Dictionary<string, string>();
+        Dictionary<string, string> threadOutControll = new Dictionary<string, string>();
         List<DBTool> lstDBSession = new List<DBTool>();
         Dictionary<string, object> uiDataCatch = new Dictionary<string, object>();
+        Dictionary<string, object> _data = new Dictionary<string, object>();
         public Dictionary<string, string> alarmDetail = new Dictionary<string, string>();
+        string _RTDSecKey = "";
+
         public Startup(IConfiguration configuration)
         {
+            _tmpClassGyroSystemControl = new ClassGyroSystemControl();
             Configuration = configuration;
-            string rtdVer = "Version 1.0.24.1009.1.0.1";
+            string rtdVer = _tmpClassGyroSystemControl.GetSystemVersion;
+            //string rtdVer = "Version 1.0.24.1225.1.0.1";
             string msg = "";
             string tmpMsg = "";
             //DBPool dbPool = null;
@@ -51,15 +66,7 @@ namespace RTDWebAPI
                 try
                 {
                     string startTime = DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss");
-                    string strSystem = String.Format(@"
-        RRRRRRR     TTTTTTTTTT   DDDDDDDD
-       RR     RR       TT     ¡@DD      DD
-      RR     RR       TT     ¡@DD       DD
-     RR   RRR       TT     ¡@DD       DD
-    RR RRR         TT     ¡@DD       DD
-   RR    RReal    TTime  ¡@DD      DD
-  RR      RR     TT     ¡@DD    DD
-RRRRRRRRRRRRRRRTTT       DDDDDDDispatcher  System {0} @ Gyro System Inc.", rtdVer);
+                    string strSystem = String.Format(GyroComponent.GyroRTD, rtdVer);
                     Console.WriteLine(strSystem);
                     logger.Info(strSystem);
                     string systemName = Configuration["AppSettings:Sytem"];
@@ -69,6 +76,10 @@ RRRRRRRRRRRRRRRTTT       DDDDDDDispatcher  System {0} @ Gyro System Inc.", rtdVe
                     msg = string.Format("Start Time [{0}]", startTime);
                     Console.WriteLine(msg);
                     logger.Info(msg);
+
+                    _RTDSecKey = RTDSecurity.GenerateSecurityKey();
+                    RTDSecurity.RegisterSecurityKey(_RTDSecKey);
+                    logger.Info(RTDSecurity.ShowSecurityKey);
 
                     while (true)
                     {
@@ -182,6 +193,7 @@ RRRRRRRRRRRRRRRTTT       DDDDDDDispatcher  System {0} @ Gyro System Inc.", rtdVe
 
                 //Create Thread Controll 
                 threadControll = new Dictionary<string, string>();
+                threadOutControll = new Dictionary<string, string>();
                 msg = String.Format("Thred Controll Queue has been create.");
                 logger.Info(string.Format("Info: {0}", msg));
 
@@ -189,7 +201,10 @@ RRRRRRRRRRRRRRRTTT       DDDDDDDispatcher  System {0} @ Gyro System Inc.", rtdVe
                 {
                     MainService mainService = new MainService();
                     tmpMsg = String.Empty;
+                    _data = new Dictionary<string, object>();
 
+                    _data.Add(CommonsConst.RTDSecKey, _RTDSecKey);
+                    _data.Add(CommonsConst.ThreadsOutControll, threadOutControll);
                     //while (true)
                     //{
                     if (!mainService.IsAlive)
@@ -205,7 +220,9 @@ RRRRRRRRRRRRRRRTTT       DDDDDDDispatcher  System {0} @ Gyro System Inc.", rtdVe
                         mainService._listDBSession = lstDBSession;
                         mainService._uiDataCatch = uiDataCatch;
                         mainService._alarmDetail = alarmDetail;
+                        mainService._payload = _data;
 
+                        RTDSecurity.RegisterSecurityKey(dbTool, _RTDSecKey);
 
                         try
                         {
@@ -373,6 +390,17 @@ RRRRRRRRRRRRRRRTTT       DDDDDDDispatcher  System {0} @ Gyro System Inc.", rtdVe
             DebugTarget.ArchiveFileName = "${basedir}/logs/Debug_${shortdate}.{#}.log";
 
             config.AddRule(LogLevel.Debug, LogLevel.Debug, DebugTarget);
+
+            var FactoryTarget = new FileTarget
+            {
+                FileName = "${basedir}/logs/Factory_${shortdate}.log",
+                Layout = "${date:format=yyyy-MM-dd HH\\:mm\\:ss} [${uppercase:${level}}] ${message}",
+                ArchiveAboveSize = 102400000,
+            };
+            //DebugTarget.ArchiveAboveSize = 2;// 2048000;
+            DebugTarget.ArchiveFileName = "${basedir}/logs/Factory_${shortdate}.{#}.log";
+
+            config.AddRule(LogLevel.Trace, LogLevel.Trace, FactoryTarget);
 
             LogManager.Configuration = config;
         }

@@ -1,9 +1,9 @@
 ﻿using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json.Linq;
 using NLog;
+using RTDDAC;
 using RTDWebAPI.APP;
 using RTDWebAPI.Commons.DataRelated.SQLSentence;
-using RTDWebAPI.Commons.Method.Database;
 using RTDWebAPI.Models;
 using System.Collections.Concurrent;
 using System.Collections.Generic;

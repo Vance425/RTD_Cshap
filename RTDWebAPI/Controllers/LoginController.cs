@@ -2,7 +2,6 @@
 using NLog;
 using Microsoft.Extensions.Configuration;
 using RTDWebAPI.Commons.DataRelated.SQLSentence;
-using RTDWebAPI.Commons.Method.Database;
 using RTDWebAPI.Commons.Method.WSClient;
 using RTDWebAPI.Interface;
 using RTDWebAPI.Models;
@@ -18,6 +17,7 @@ using System.Xml;
 using System.IO;
 using RTDWebAPI.Commons.Method.Tools;
 using System.Threading;
+using RTDDAC;
 
 namespace RTDWebAPI.Controllers
 {

@@ -3,7 +3,7 @@ using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NLog;
-using RTDWebAPI.Commons.Method.Database;
+using RTDDAC;
 using RTDWebAPI.Interface;
 using RTDWebAPI.Models;
 using RTDWebAPI.Service;
@@ -55,6 +55,7 @@ namespace RTDWebAPI.Controllers
             string tmpMsg = "";
             int iExecuteMode = 1;
             DataTable dt = null;
+            DataTable dt2 = null;
             DataTable dtTemp = null;
             DataRow[] dr = null;
             string sql = "";
@@ -70,6 +71,26 @@ namespace RTDWebAPI.Controllers
             string tmpDatabase = "";
             string tmpAutoDisconn = "";
             DBTool _dbTool;
+
+            string _table = "";
+            string _carrierId = "";
+            string _lotId = "";
+            string v_STAGE = "";
+            string v_CUSTOMERNAME = "";
+            string v_PARTID = "";
+            string v_LOTTYPE = "";
+            string v_AUTOMOTIVE = "";
+            string v_STATE = "";
+            string v_HOLDCODE = "";
+            string v_TURNRATIO = "0";
+            string v_EOTD = "";
+            string v_HOLDREAS = "";
+            string v_POTD = "";
+            string v_WAFERLOT = "";
+            string v_Force = "";
+
+            int _total_qty = 0;
+            int _quantity = 0;
 
             try
             {
@@ -159,13 +180,26 @@ namespace RTDWebAPI.Controllers
                         Total = 0,
                         Quantity = 0,
                         ErrorCode = "",
-                        Message = "Carrier Id is not exist."
+                        Message = "Carrier Id is not exist.",
+                        Stage = "",
+                        Cust = "",
+                        PartID = "",
+                        LotType = "",
+                        Automotive = "",
+                        HoldCode = "",
+                        TurnRatio = 0,
+                        EOTD = "",
+                        WaferLot = "",
+                        HoldReas = "",
+                        POTD = ""
                     };
                 }
                 else
                 {
-                    int _total_qty = 0;
-                    int _quantity = 0;
+                    _total_qty = 0;
+                    _quantity = 0;
+                    _lotId = dt.Rows[0]["lot_id"].ToString();
+
                     switch (iSplitMode)
                     {
                         case 1:
@@ -185,15 +219,66 @@ namespace RTDWebAPI.Controllers
                             break;
                     }
 
-                    foo = new ApiResultQuantityInfo()
+                    try
                     {
-                        State = "OK",
-                        CarrierId = value.CarrierId,
-                        LotId = dt.Rows[0]["lot_id"].ToString(),
-                        Total = _total_qty,
-                        Quantity = _quantity
-                    };
+                        if (v_CUSTOMERNAME.Equals(""))
+                        {
+                            sql = _BaseDataService.SelectTableLotInfoByLotid(_lotId);
+                            dt2 = _dbTool.GetDataTable(sql);
+
+                            if (dt2.Rows.Count > 0)
+                            {
+                                v_CUSTOMERNAME = dt2.Rows[0]["CUSTOMERNAME"].ToString().Equals("") ? "" : dt2.Rows[0]["CUSTOMERNAME"].ToString();
+                                v_PARTID = dt2.Rows[0]["PARTID"].ToString().Equals("") ? "" : dt2.Rows[0]["PARTID"].ToString();
+                                v_LOTTYPE = dt2.Rows[0]["LOTTYPE"].ToString().Equals("") ? "" : dt2.Rows[0]["LOTTYPE"].ToString();
+                            }
+                        }
+
+                        sql = _BaseDataService.QueryErackInfoByLotID(_configuration["eRackDisplayInfo:contained"], _lotId);
+                        dtTemp = _dbTool.GetDataTable(sql);
+
+                        if (dtTemp.Rows.Count > 0)
+                        {
+                            v_STAGE = dtTemp.Rows[0]["STAGE"].ToString().Equals("") ? "" : dtTemp.Rows[0]["STAGE"].ToString();
+                            v_AUTOMOTIVE = dtTemp.Rows[0]["AUTOMOTIVE"].ToString().Equals("") ? "" : dtTemp.Rows[0]["AUTOMOTIVE"].ToString();
+                            v_STATE = dtTemp.Rows[0]["STATE"].ToString().Equals("") ? "" : dtTemp.Rows[0]["STATE"].ToString();
+                            v_HOLDCODE = dtTemp.Rows[0]["HOLDCODE"].ToString().Equals("") ? "" : dtTemp.Rows[0]["HOLDCODE"].ToString();
+                            v_TURNRATIO = dtTemp.Rows[0]["TURNRATIO"].ToString().Equals("") ? "0" : dtTemp.Rows[0]["TURNRATIO"].ToString();
+                            v_EOTD = dtTemp.Rows[0]["EOTD"].ToString().Equals("") ? "" : dtTemp.Rows[0]["EOTD"].ToString();
+                            v_POTD = dtTemp.Rows[0]["POTD"].ToString().Equals("") ? "" : dtTemp.Rows[0]["POTD"].ToString();
+                            v_HOLDREAS = dtTemp.Rows[0]["HoldReas"].ToString().Equals("") ? "" : dtTemp.Rows[0]["HoldReas"].ToString();
+                            v_WAFERLOT = dtTemp.Rows[0]["waferlotid"].ToString().Equals("") ? "" : dtTemp.Rows[0]["waferlotid"].ToString();
+                            v_Force = "false";
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        tmpMsg = string.Format("[AutoSentInfoUpdate: Column Issue. {0}]", ex.Message);
+                        _logger.Debug(tmpMsg);
+                    }
                 }
+
+                foo = new ApiResultQuantityInfo()
+                {
+                    State = "OK",
+                    CarrierId = value.CarrierId,
+                    LotId = dt.Rows[0]["lot_id"].ToString().Equals("") ? "" : dt.Rows[0]["lot_id"].ToString(),
+                    Total = _total_qty,
+                    Quantity = _quantity,
+                    ErrorCode = "",
+                    Message = "",
+                    Stage = v_STAGE,
+                    Cust = v_CUSTOMERNAME,
+                    PartID = v_PARTID,
+                    LotType = v_LOTTYPE,
+                    Automotive = v_AUTOMOTIVE,
+                    HoldCode = v_HOLDCODE,
+                    TurnRatio = v_TURNRATIO.Equals("") ? 0 : float.Parse(v_TURNRATIO),
+                    EOTD = v_EOTD,
+                    WaferLot = v_WAFERLOT,
+                    HoldReas = v_HOLDREAS,
+                    POTD = v_POTD
+                };
             }
             catch (Exception ex)
             {
@@ -205,7 +290,18 @@ namespace RTDWebAPI.Controllers
                     Total = 0,
                     Quantity = 0,
                     ErrorCode = "",
-                    Message = ex.Message
+                    Message = ex.Message,
+                    Stage = "",
+                    Cust = "",
+                    PartID = "",
+                    LotType = "",
+                    Automotive = "",
+                    HoldCode = "",
+                    TurnRatio = 0,
+                    EOTD = "",
+                    WaferLot = "",
+                    HoldReas = "",
+                    POTD = ""
                 };
             }
             finally
@@ -232,6 +328,17 @@ namespace RTDWebAPI.Controllers
             public int Quantity { get; set; }
             public string ErrorCode { get; set; }
             public string Message { get; set; }
+            public string Stage { get; set; }
+            public string Cust { get; set; }
+            public string PartID { get; set; }
+            public string LotType { get; set; }
+            public string Automotive { get; set; }
+            public string HoldCode { get; set; }
+            public float TurnRatio { get; set; }
+            public string EOTD { get; set; }
+            public string WaferLot { get; set; }
+            public string HoldReas { get; set; }
+            public string POTD { get; set; }
         }
     }
 }

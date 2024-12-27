@@ -337,5 +337,8 @@ namespace RTDWebAPI.Interface
         string SelectEquipPortInfo2();
         string QueryERackInfo2();
         string UpdatePriorityForWorkgroupSet(string _Workgroup, string _stage, int _priority);
+        string InsertRTDParameterSet(Dictionary<string, object> _object);
+        string UadateRTDParameterSet(Dictionary<string, object> _object);
+        string RemoveLotFromLotInfo(string _lotID);
     }
 }

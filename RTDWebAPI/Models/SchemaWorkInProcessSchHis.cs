@@ -26,5 +26,6 @@ namespace RTDWebAPI.Models
         public DateTime Create_Dt { get; set; }
         public DateTime Modify_Dt { get; set; }
         public DateTime LastModify_Dt { get; set; }
+        public DateTime Start_Dt { get; set; }
     }
 }

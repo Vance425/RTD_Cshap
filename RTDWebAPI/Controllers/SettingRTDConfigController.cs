@@ -1,11 +1,12 @@
-﻿using Microsoft.AspNetCore.Cors;
+﻿using GyroLibrary;
+using Microsoft.AspNetCore.Cors;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Configuration;
 using Nancy.Json;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using NLog;
-using RTDWebAPI.Commons.Method.Database;
+using RTDDAC;
 using RTDWebAPI.Interface;
 using RTDWebAPI.Models;
 using RTDWebAPI.Service;
@@ -2473,7 +2474,7 @@ namespace RTDWebAPI.Controllers
             public string Values { get; set; }
             public string UserID { get; set; }
         }
-
+        
         [HttpPost("QueryMidways")]
         public ActionResult<String> QueryMidways([FromBody] QueryMidways value)
         {
@@ -2482,10 +2483,8 @@ namespace RTDWebAPI.Controllers
             string tmpMsg = "";
             string strResult = "";
             DataTable dt = null;
-            DataTable dtTemp = null;
             DataRow[] dr = null;
             string sql = "";
-            
             IBaseDataService _BaseDataService = new BaseDataService();
 
             try
@@ -2496,95 +2495,7 @@ namespace RTDWebAPI.Controllers
 
                 if (dt.Rows.Count > 0)
                 {
-                    string[] tmpStr = new string[dt.Rows.Count];
-                    string tmpJson = "";
-                    string tmpAllJson = "";
-                    JArray jsonArray = new JArray();
-                    JObject jsonObject = new JObject();
-                    JObject jsonObj2 = new JObject();
-
-                    //foreach (DataRow row in dt.Rows)
-                    tmpJson = JsonConvert.SerializeObject(dt);
-
-                    if (tmpJson.TrimStart().StartsWith("["))
-                    {
-                        jsonArray = JArray.Parse(tmpJson);
-                        // Process the array
-                    }
-                    else
-                    {
-                        jsonObject = JObject.Parse(tmpJson);
-                        // Process the object
-                    }
-                    string tmpBBB = "";
-                    string _stage = "";
-                    string _workgroup = "";
-                    string _inErack = "";
-                    Dictionary<string, string> tmpDict = new Dictionary<string, string>();
-                    Dictionary<string, string> tmpArray;
-                    for (int i = 0; i < jsonArray.Count; i++)
-                    {
-
-                        tmpJson = jsonArray[i].ToString().Replace("\r\n", "").Replace("\"{", "").Replace("}\"", "");
-                        tmpDict = JsonConvert.DeserializeObject<Dictionary<string, string>>(tmpJson);
-
-                        try
-                        {
-
-                            _stage = tmpDict["STAGE"] is null ? "" : tmpDict["STAGE"].ToString();
-                            _workgroup = tmpDict["WORKGROUP"] is null ? "" : tmpDict["WORKGROUP"].ToString();
-
-                            sql = _BaseDataService.QueryWorkgroupSet(_workgroup, _stage);
-                            dtTemp = _dbTool.GetDataTable(sql);
-
-                            if (dtTemp.Rows.Count > 0)
-                            {
-                                _inErack = dtTemp.Rows[0]["in_erack"].ToString();
-                            }
-
-                            sql = _BaseDataService.QueryRackByGroupID(_inErack);
-                            dtTemp = _dbTool.GetDataTable(sql);
-
-                            if (dtTemp.Rows.Count > 0)
-                            {
-                                foreach (DataRow drRecord in dtTemp.Rows)
-                                {
-                                    tmpArray = new Dictionary<string, string>();
-                                    tmpArray.Add("erackID", drRecord["erackID"].ToString());
-                                    tmpArray.Add("groupID", drRecord["groupID"].ToString());
-                                    tmpArray.Add("location", drRecord["location"].ToString());
-                                    tmpArray.Add("validCarrierType", drRecord["validCarrierType"].ToString());
-
-                                    //row["destination"] = JObject.Parse(string.Format("[{0}]", JsonConvert.SerializeObject(tmpArray.ToString()))).ToString();
-
-                                    if (tmpBBB.Equals(""))
-                                    {
-                                        tmpBBB = string.Format("{0}", JObject.Parse(string.Format("[{0}]", JsonConvert.SerializeObject(tmpArray.ToString()))).ToString());
-                                    }
-                                    else
-                                    {
-                                        tmpBBB = string.Format("{0},{1}", tmpBBB, JObject.Parse(string.Format("[{0}]", JsonConvert.SerializeObject(tmpArray.ToString()))).ToString());
-                                    }
-                                }
-
-                                //tmpJson = tmpJson.Replace("\"DEST\"", string.Format("{0}", MyDictionaryToJson(tmpBBB)));
-                                tmpJson = tmpJson.Replace("\"DEST\"", string.Format("[{0}]", tmpBBB));
-                            }
-                        }
-                        catch (Exception ex) { }
-
-                        //tmpAllJson = string.Format("{0}", tmpJson);
-                        if (tmpAllJson.Equals(""))
-                        {
-                            tmpAllJson = string.Format("{0}", tmpJson);
-                        }
-                        else
-                        {
-                            tmpAllJson = string.Format("{0},{1}", tmpAllJson, tmpJson);
-                        }
-                    }
-                    //strResult = JsonConvert.SerializeObject(tmpStr);
-                    strResult = string.Format("{0}", tmpAllJson);
+                    strResult = JsonConvert.SerializeObject(dt);
                 }
             }
             catch (Exception ex)
@@ -3771,6 +3682,115 @@ namespace RTDWebAPI.Controllers
             public string Workgroup { get; set; }
             public string Stage { get; set; }
             public int Priority { get; set; }
+        }
+
+        [HttpPost("MonitorDatabaseRequest")]
+        public APIResult MonitorDatabaseRequest([FromBody] ClassMonitorDatabaseRequest value)
+        {
+            ///1.0.25.0204.1.0.0
+            APIResult foo;
+            string funcName = "MonitorDatabaseRequest";
+            string tmpMsg = "";
+            string strResult = "";
+            DataTable dt = null;
+            DataRow[] dr = null;
+            string sql = "";
+            IBaseDataService _BaseDataService = new BaseDataService();
+            Dictionary<string, object> _object = new Dictionary<string, object>();
+
+            try
+            {
+                foo = new APIResult()
+                {
+                    Success = false,
+                    State = "NG",
+                    Message = tmpMsg
+                };
+
+                if(value.TurnOn.Equals(""))
+                {
+                    tmpMsg = string.Format("Turn On value cannot empty.");
+
+                    foo = new APIResult()
+                    {
+                        Success = false,
+                        State = "NG",
+                        Message = tmpMsg
+                    };
+
+                    return foo;
+                }
+
+                sql = _BaseDataService.SelectRTDDefaultSet("DebugDBRequest");
+                dt = _dbTool.GetDataTable(sql);
+                if (dt.Rows.Count > 0)
+                {
+                    _object.Add(ConstParams.Parameter, "DebugDBRequest");
+                    _object.Add(ConstParams.Paramtype, "databaseAccess");
+                    _object.Add(ConstParams.Paramvalue, value.TurnOn.ToUpper().Equals("TRUE") ? "True": "False");
+                    _object.Add(ConstParams.Modifyby, "RTD");
+                    _object.Add(ConstParams.Description, "");
+
+                    sql = _BaseDataService.UadateRTDParameterSet(_object);
+                    _dbTool.SQLExec(sql, out tmpMsg, true);
+
+                    strResult = "";
+                }
+                else
+                {
+                    _object.Add(ConstParams.Parameter, "DebugDBRequest");
+                    _object.Add(ConstParams.Paramtype, "databaseAccess");
+                    _object.Add(ConstParams.Paramvalue, "False");
+                    _object.Add(ConstParams.Modifyby, "RTD");
+                    _object.Add(ConstParams.Description, "");
+
+                    sql = _BaseDataService.InsertRTDParameterSet(_object);
+                    _dbTool.SQLExec(sql, out tmpMsg, true);
+
+                    strResult = "";
+                }
+
+                if(tmpMsg.Equals(""))
+                {
+                    foo = new APIResult()
+                    {
+                        Success = true,
+                        State = "OK",
+                        Message = strResult
+                    };
+                }
+                else
+                {
+                    foo = new APIResult()
+                    {
+                        Success = false,
+                        State = "NG",
+                        Message = tmpMsg
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                foo = new APIResult()
+                {
+                    Success = false,
+                    State = "NG",
+                    Message = ex.Message
+                };
+            }
+            finally
+            {
+                if (dt is not null)
+                {
+                    dt.Clear(); dt.Dispose(); dt = null; dr = null;
+                }
+            }
+
+            return foo;
+        }
+        public class ClassMonitorDatabaseRequest
+        {
+            public string TurnOn { get; set; }
         }
     }
 }
